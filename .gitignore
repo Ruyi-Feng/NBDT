@@ -1,3 +1,6 @@
+__pycache__/
+*.pyc
+
 # IDE 配置文件
 .idea/
 *.iml
@@ -5,3 +8,8 @@
 *.ipr
 .vscode/
 test.py
+
+# Data files
+original_data/
+processed_data/
+
