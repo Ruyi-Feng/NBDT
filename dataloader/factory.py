@@ -27,6 +27,6 @@ def get_driver(args):
 
 def main():
     args = parameters()
-    transfer = get_driver(args.dataset)
+    transfer = get_driver(args)
     transfer.run()
     pass

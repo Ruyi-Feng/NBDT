@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import pandas as pd
 
 class BasicTransfer:
@@ -16,10 +17,10 @@ class BasicTransfer:
         raise NotImplementedError
 
     def _save_data(self, processed_data: pd.DataFrame, file_name: str) -> None:
-        file_name = file_name.split("/")[-1]
+        file_name = os.path.basename(file_name)
         file_name = file_name.split(".")[0]
         save_path = os.path.join(self.args.save_folder, file_name+".csv")
-        processed_data.to_csv(save_path)
+        processed_data.to_csv(save_path, index=False)
 
     def run(self) -> None:
         data_list = self.get_all_data()
@@ -33,10 +34,117 @@ class HighDTransfer(BasicTransfer):
     def __init__(self, args):
         super(HighDTransfer, self).__init__(args)
 
+    def get_all_data(self) -> list:
+        """Override: only return XX_tracks.csv files (skip meta/jpg files)."""
+        file_names = os.listdir(self.args.data_folder)
+        data_list = []
+        for file_name in file_names:
+            if file_name.endswith('_tracks.csv'):
+                data_list.append(os.path.join(self.args.data_folder, file_name))
+        data_list.sort()
+        return data_list
+
     def _process_data(self, file_path: str) -> pd.DataFrame:
         # 对于不同的数据集transfer，补充这个函数即可。返回处理好的dataframe。
         # 一般情况保持 basictransfer 不动
-        pass
+
+        # Read data files
+        tracks = pd.read_csv(file_path)
+
+        # Derive corresponding meta file paths from XX_tracks.csv
+        prefix = file_path.replace('_tracks.csv', '')
+        tracks_meta = pd.read_csv(prefix + '_tracksMeta.csv')
+
+        # Merge class & drivingDirection from tracksMeta
+        tracks = tracks.merge(
+            tracks_meta[['id', 'class', 'drivingDirection']],
+            on='id', how='left'
+        )
+
+        # Compute vehicle center coordinates (meters)
+        carCenterXm = tracks['x'] + tracks['width'] / 2
+        carCenterYm = tracks['y'] + tracks['height'] / 2
+
+        # Compute speed (m/s)
+        speed = np.sqrt(tracks['xVelocity']**2 + tracks['yVelocity']**2)
+
+        # Compute heading angle (relative to image X-axis, 0-360 degrees)
+        heading = np.degrees(
+            np.arctan2(tracks['yVelocity'], tracks['xVelocity'])
+        ) % 360
+
+        # Handle stationary vehicles (speed=0): assign heading by drivingDirection
+        #   drivingDirection=1 (upper lanes, moving left) -> 180 degrees
+        #   drivingDirection=2 (lower lanes, moving right) -> 0 degrees
+        stationary = (tracks['xVelocity'] == 0) & (tracks['yVelocity'] == 0)
+        heading[stationary & (tracks['drivingDirection'] == 1)] = 180.0
+        heading[stationary & (tracks['drivingDirection'] == 2)] = 0.0
+
+        # Compute Oriented Bounding Box 4 corner points
+        # highD: width = vehicle length, height = vehicle width
+        l = tracks['width'] / 2   # half-length (along heading direction)
+        w = tracks['height'] / 2  # half-width  (perpendicular to heading)
+        theta = np.radians(heading)
+        cos_t = np.cos(theta)
+        sin_t = np.sin(theta)
+        lc = l * cos_t
+        ls = l * sin_t
+        wc = w * cos_t
+        ws = w * sin_t
+        #   Corner1(front-left)   Corner2(front-right)
+        #   Corner4(rear-left)    Corner3(rear-right)
+        bb1Xm = carCenterXm + lc + ws
+        bb1Ym = carCenterYm + ls - wc
+        bb2Xm = carCenterXm + lc - ws
+        bb2Ym = carCenterYm + ls + wc
+        bb3Xm = carCenterXm - lc - ws
+        bb3Ym = carCenterYm - ls + wc
+        bb4Xm = carCenterXm - lc + ws
+        bb4Ym = carCenterYm - ls - wc
+
+        # Map vehicle class
+        # highD: "Car" / "Truck" -> NBDT: 0=car, 3=truck
+        class_map = {'Car': 0, 'Truck': 3}
+        objClass = tracks['class'].map(class_map).fillna(-1).astype(int)
+
+        # Build standard format DataFrame
+        # Column order follows NBDT TrajectoryDataFormat wiki specification
+        result = pd.DataFrame({
+            'frameNum': tracks['frame'],
+            'carId': tracks['id'],
+            # Pixel coordinates (highD has no pixel data, set to -1)
+            'carCenterX': -1,
+            'carCenterY': -1,
+            'boundingBox1X': -1,
+            'boundingBox1Y': -1,
+            'boundingBox2X': -1,
+            'boundingBox2Y': -1,
+            'boundingBox3X': -1,
+            'boundingBox3Y': -1,
+            'boundingBox4X': -1,
+            'boundingBox4Y': -1,
+            # Meter coordinates
+            'carCenterXm': carCenterXm,
+            'carCenterYm': carCenterYm,
+            'boundingBox1Xm': bb1Xm,
+            'boundingBox1Ym': bb1Ym,
+            'boundingBox2Xm': bb2Xm,
+            'boundingBox2Ym': bb2Ym,
+            'boundingBox3Xm': bb3Xm,
+            'boundingBox3Ym': bb3Ym,
+            'boundingBox4Xm': bb4Xm,
+            'boundingBox4Ym': bb4Ym,
+            # Motion attributes
+            'heading': heading,
+            'course': -1,       # No global north reference in highD
+            'speed': speed,
+            'objClass': objClass,
+            # Geographic coordinates (highD has no GPS data)
+            'carCenterLon': -1,
+            'carCenterLat': -1,
+        })
+
+        return result
 
 
 class InDTransfer(BasicTransfer):
