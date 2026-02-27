@@ -12,4 +12,5 @@ test.py
 # Data files
 original_data/
 processed_data/
+*.zip
 
