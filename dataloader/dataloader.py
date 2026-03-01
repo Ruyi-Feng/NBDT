@@ -107,22 +107,38 @@ class HighDTransfer(BasicTransfer):
         class_map = {'Car': 0, 'Truck': 3}
         objClass = tracks['class'].map(class_map).fillna(-1).astype(int)
 
+        # Convert meter coordinates to pixel coordinates on the highway background image
+        # Source: highD official visualization tool (visualize_frame.py)
+        #   bounding_box /= 0.10106  (original video pix2meter)
+        #   bounding_box /= 4        (background image is 4x reduced)
+        PIX2METER = 0.10106 * 4  # 0.40424 meters per pixel
+        carCenterX = carCenterXm / PIX2METER
+        carCenterY = carCenterYm / PIX2METER
+        bb1X = bb1Xm / PIX2METER
+        bb1Y = bb1Ym / PIX2METER
+        bb2X = bb2Xm / PIX2METER
+        bb2Y = bb2Ym / PIX2METER
+        bb3X = bb3Xm / PIX2METER
+        bb3Y = bb3Ym / PIX2METER
+        bb4X = bb4Xm / PIX2METER
+        bb4Y = bb4Ym / PIX2METER
+
         # Build standard format DataFrame
         # Column order follows NBDT TrajectoryDataFormat wiki specification
         result = pd.DataFrame({
             'frameNum': tracks['frame'],
             'carId': tracks['id'],
-            # Pixel coordinates (highD has no pixel data, set to -1)
-            'carCenterX': -1,
-            'carCenterY': -1,
-            'boundingBox1X': -1,
-            'boundingBox1Y': -1,
-            'boundingBox2X': -1,
-            'boundingBox2Y': -1,
-            'boundingBox3X': -1,
-            'boundingBox3Y': -1,
-            'boundingBox4X': -1,
-            'boundingBox4Y': -1,
+            # Pixel coordinates (on highway background image)
+            'carCenterX': carCenterX,
+            'carCenterY': carCenterY,
+            'boundingBox1X': bb1X,
+            'boundingBox1Y': bb1Y,
+            'boundingBox2X': bb2X,
+            'boundingBox2Y': bb2Y,
+            'boundingBox3X': bb3X,
+            'boundingBox3Y': bb3Y,
+            'boundingBox4X': bb4X,
+            'boundingBox4Y': bb4Y,
             # Meter coordinates
             'carCenterXm': carCenterXm,
             'carCenterYm': carCenterYm,
@@ -142,6 +158,8 @@ class HighDTransfer(BasicTransfer):
             # Geographic coordinates (highD has no GPS data)
             'carCenterLon': -1,
             'carCenterLat': -1,
+            # Additional field
+            'laneId': tracks['laneId'],
         })
 
         return result
