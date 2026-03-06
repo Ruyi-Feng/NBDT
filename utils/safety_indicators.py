@@ -1,11 +1,9 @@
 import os
 import math
 from collections import defaultdict
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
 from box_distance import calculate_nearest_points, order_rect_points
 
 # ========================= Configuration Parameters =========================
