@@ -1,6 +1,5 @@
 import math
 
-
 def order_rect_points(points):
     centroid_x = sum(p[0] for p in points) / 4
     centroid_y = sum(p[1] for p in points) / 4
