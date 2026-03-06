@@ -174,8 +174,186 @@ class InDTransfer(BasicTransfer):
     def __init__(self, args):
         super(InDTransfer, self).__init__(args)
 
+    def get_all_data(self) -> list:
+        """Override: only return XX_tracks.csv files."""
+        file_names = os.listdir(self.args.data_folder)
+        data_list = []
+        for file_name in file_names:
+            if file_name.endswith('_tracks.csv'):
+                data_list.append(os.path.join(self.args.data_folder, file_name))
+        data_list.sort()
+        return data_list
+
     def _process_data(self, file_path: str) -> pd.DataFrame:
-        pass
+        # Read tracks.csv
+        tracks = pd.read_csv(file_path)
+
+        # Derive corresponding meta file paths
+        prefix = file_path.replace('_tracks.csv', '')
+        tracks_meta = pd.read_csv(prefix + '_tracksMeta.csv')
+        recording_meta = pd.read_csv(prefix + '_recordingMeta.csv')
+
+        # Merge class from tracksMeta
+        tracks = tracks.merge(
+            tracks_meta[['trackId', 'class']],
+            on='trackId', how='left'
+        )
+
+        # Center coordinates (already in meters)
+        carCenterXm = tracks['xCenter']
+        carCenterYm = tracks['yCenter']
+
+        # Heading (already provided, in degrees)
+        heading = tracks['heading']
+
+        # Speed (m/s)
+        speed = np.sqrt(tracks['xVelocity']**2 + tracks['yVelocity']**2)
+
+        # OBB 4 corner points
+        # inD: length=vehicle length (along heading), width=vehicle width
+        l = tracks['length'] / 2
+        w = tracks['width'] / 2
+        theta = np.radians(heading)
+        cos_t = np.cos(theta)
+        sin_t = np.sin(theta)
+        lc = l * cos_t
+        ls = l * sin_t
+        wc = w * cos_t
+        ws = w * sin_t
+        bb1Xm = carCenterXm + lc + ws
+        bb1Ym = carCenterYm + ls - wc
+        bb2Xm = carCenterXm + lc - ws
+        bb2Ym = carCenterYm + ls + wc
+        bb3Xm = carCenterXm - lc - ws
+        bb3Ym = carCenterYm - ls + wc
+        bb4Xm = carCenterXm - lc + ws
+        bb4Ym = carCenterYm - ls - wc
+
+        # Map vehicle class (NBDT Wiki: 0=car, 3=truck, 5=pedestrian)
+        class_map = {'car': 0, 'truck_bus': 3, 'pedestrian': 5, 'bicycle': -1}
+        objClass = tracks['class'].map(class_map).fillna(-1).astype(int)
+
+        # Convert meter coordinates to pixel coordinates on background image
+        # Background image is downscaled from original orthophoto:
+        #   inD scale_down_factor=12, rounD scale_down_factor=10
+        # pixel_x = xCenter / (orthoPxToMeter * scale_down_factor)
+        # pixel_y = -yCenter / (orthoPxToMeter * scale_down_factor)  (Y axis inverted)
+        PIX2METER = recording_meta['orthoPxToMeter'].iloc[0]
+        scale_down = getattr(self.args, 'scale_down_factor', 12)
+        effective_scale = PIX2METER * scale_down
+        carCenterX = carCenterXm / effective_scale
+        carCenterY = -carCenterYm / effective_scale
+        bb1X = bb1Xm / effective_scale
+        bb1Y = -bb1Ym / effective_scale
+        bb2X = bb2Xm / effective_scale
+        bb2Y = -bb2Ym / effective_scale
+        bb3X = bb3Xm / effective_scale
+        bb3Y = -bb3Ym / effective_scale
+        bb4X = bb4Xm / effective_scale
+        bb4Y = -bb4Ym / effective_scale
+
+        result = pd.DataFrame({
+            'frameNum': tracks['frame'],
+            'carId': tracks['trackId'],
+            'carCenterX': carCenterX,
+            'carCenterY': carCenterY,
+            'boundingBox1X': bb1X,
+            'boundingBox1Y': bb1Y,
+            'boundingBox2X': bb2X,
+            'boundingBox2Y': bb2Y,
+            'boundingBox3X': bb3X,
+            'boundingBox3Y': bb3Y,
+            'boundingBox4X': bb4X,
+            'boundingBox4Y': bb4Y,
+            'carCenterXm': carCenterXm,
+            'carCenterYm': carCenterYm,
+            'boundingBox1Xm': bb1Xm,
+            'boundingBox1Ym': bb1Ym,
+            'boundingBox2Xm': bb2Xm,
+            'boundingBox2Ym': bb2Ym,
+            'boundingBox3Xm': bb3Xm,
+            'boundingBox3Ym': bb3Ym,
+            'boundingBox4Xm': bb4Xm,
+            'boundingBox4Ym': bb4Ym,
+            'heading': heading,
+            'course': -1,
+            'speed': speed,
+            'objClass': objClass,
+            'carCenterLon': -1,
+            'carCenterLat': -1,
+            'laneId': -1,
+        })
+
+        return result
+
+class CitySimTransfer(BasicTransfer):
+    def __init__(self, args):
+        super(CitySimTransfer, self).__init__(args)
+
+    def get_all_data(self) -> list:
+        """Override: return all .csv files."""
+        file_names = sorted(os.listdir(self.args.data_folder))
+        data_list = [
+            os.path.join(self.args.data_folder, f)
+            for f in file_names
+            if f.lower().endswith('.csv')
+        ]
+        return data_list
+
+    def _process_data(self, file_path: str) -> pd.DataFrame:
+        raw = pd.read_csv(file_path)
+
+        FEET2METER = 0.3048
+
+        # Meter coordinates (convert from feet)
+        carCenterXm = raw['carCenterXft'] * FEET2METER
+        carCenterYm = raw['carCenterYft'] * FEET2METER
+        bb1Xm = raw['boundingBox1Xft'] * FEET2METER
+        bb1Ym = raw['boundingBox1Yft'] * FEET2METER
+        bb2Xm = raw['boundingBox2Xft'] * FEET2METER
+        bb2Ym = raw['boundingBox2Yft'] * FEET2METER
+        bb3Xm = raw['boundingBox3Xft'] * FEET2METER
+        bb3Ym = raw['boundingBox3Yft'] * FEET2METER
+        bb4Xm = raw['boundingBox4Xft'] * FEET2METER
+        bb4Ym = raw['boundingBox4Yft'] * FEET2METER
+
+        result = pd.DataFrame({
+            'frameNum': raw['frameNum'],
+            'carId': raw['carId'],
+            # Pixel coordinates (directly from raw)
+            'carCenterX': raw['carCenterX'],
+            'carCenterY': raw['carCenterY'],
+            'boundingBox1X': raw['boundingBox1X'],
+            'boundingBox1Y': raw['boundingBox1Y'],
+            'boundingBox2X': raw['boundingBox2X'],
+            'boundingBox2Y': raw['boundingBox2Y'],
+            'boundingBox3X': raw['boundingBox3X'],
+            'boundingBox3Y': raw['boundingBox3Y'],
+            'boundingBox4X': raw['boundingBox4X'],
+            'boundingBox4Y': raw['boundingBox4Y'],
+            # Meter coordinates
+            'carCenterXm': carCenterXm,
+            'carCenterYm': carCenterYm,
+            'boundingBox1Xm': bb1Xm,
+            'boundingBox1Ym': bb1Ym,
+            'boundingBox2Xm': bb2Xm,
+            'boundingBox2Ym': bb2Ym,
+            'boundingBox3Xm': bb3Xm,
+            'boundingBox3Ym': bb3Ym,
+            'boundingBox4Xm': bb4Xm,
+            'boundingBox4Ym': bb4Ym,
+            # Motion attributes
+            'heading': raw['heading'],
+            'course': raw['course'],
+            'speed': raw['speed'],
+            'objClass': -1,
+            'carCenterLon': -1,
+            'carCenterLat': -1,
+            'laneId': raw['laneId'],
+        })
+
+        return result
+
 
 class NGSIMTransfer(BasicTransfer):
 
