@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from ssm_core import SSMCalculator
+from ssm_core import SSMCalculator, compute_cpi_from_drac_history, compute_tet_tit_from_history
 from data_loader import SafetyAnalyzer
 from box_distance import calculate_nearest_points
 from output_json import OutputWriter
@@ -44,7 +44,7 @@ def main():
     analyzer = SafetyAnalyzer(meta_file, tracks_file)
 
     # ===== 用户自定义参数 =====
-    EGO_ID = 20               # 指定主车ID，None表示遍历所有车
+    EGO_ID = None               # 指定主车ID，None表示遍历所有车
     TARGET_IDS = []             # 指定目标ID列表，为空则使用周围车辆
     START_FRAME = None          # 起始帧，None表示第一帧
     END_FRAME = None            # 结束帧，None表示最后一帧
@@ -122,9 +122,7 @@ def main():
                                 **ssm_clean
                             })
                         if scene['ttc_history']:
-                            tet, tit = SSMCalculator.compute_tet_tit_from_history(
-                                scene['ttc_history'], analyzer.dt, TTC_THRESHOLD
-                            )
+                            tet, tit = compute_tet_tit_from_history(scene['ttc_history'], analyzer.dt, TTC_THRESHOLD)
                         else:
                             tet, tit = None, None
                         first_rel = scene['frames_data'][0][4] if scene['frames_data'] else 'unknown'
@@ -225,8 +223,7 @@ def main():
                             "relation": f_rel,
                             **ssm_clean})
                     if scene['ttc_history']:
-                        tet, tit = SSMCalculator.compute_tet_tit_from_history(
-                            scene['ttc_history'], analyzer.dt, TTC_THRESHOLD)
+                        tet, tit = compute_tet_tit_from_history(scene['ttc_history'], analyzer.dt, TTC_THRESHOLD)
                     else:
                         tet, tit = None, None
                     first_rel = scene['frames_data'][0][4] if scene['frames_data'] else 'unknown'
@@ -258,8 +255,7 @@ def main():
                         "relation": f_rel,
                         **ssm_clean})
                 if scene['ttc_history']:
-                    tet, tit = SSMCalculator.compute_tet_tit_from_history(
-                        scene['ttc_history'], analyzer.dt, TTC_THRESHOLD)
+                    tet, tit = compute_tet_tit_from_history(scene['ttc_history'], analyzer.dt, TTC_THRESHOLD)
                 else:
                     tet, tit = None, None
                 first_rel = scene['frames_data'][0][4] if scene['frames_data'] else 'unknown'
@@ -269,7 +265,7 @@ def main():
                     frames_ssm, tit, tet)
 
         # 计算当前主车的CPI
-        cpi = SSMCalculator.compute_cpi_from_drac_history(drac_history_ego, VEHICLE_CLASS_MADR, analyzer.dt)
+        cpi = compute_cpi_from_drac_history(drac_history_ego, VEHICLE_CLASS_MADR, analyzer.dt)
         print(f"CPI for ego vehicle {ego_id}: {cpi:.4f}")
         if ENABLE_OUTPUT:
             writer.set_cpi(ego_id, cpi)
