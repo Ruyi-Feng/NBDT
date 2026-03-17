@@ -31,10 +31,11 @@ def load_tracks(tracks_file):
     return df
 
 def compute_vehicle_dimensions(row):
-    L = 0.5 * (math.sqrt((row['boundingBox1Xm'] - row['boundingBox2Xm'])**2 + (row['boundingBox1Ym'] - row['boundingBox2Ym'])**2)
-               + math.sqrt((row['boundingBox3Xm'] - row['boundingBox4Xm'])**2 + (row['boundingBox3Ym'] - row['boundingBox4Ym'])**2))
-    W = 0.5 * (math.sqrt((row['boundingBox1Xm'] - row['boundingBox4Xm'])**2 + (row['boundingBox1Ym'] - row['boundingBox4Ym'])**2)
-               + math.sqrt((row['boundingBox2Xm'] - row['boundingBox3Xm'])**2 + (row['boundingBox2Ym'] - row['boundingBox3Ym'])**2))
+    """计算车辆的长度和宽度"""
+    L = 0.5 * (np.sqrt((row['boundingBox1Xm'] - row['boundingBox2Xm'])**2 + (row['boundingBox1Ym'] - row['boundingBox2Ym'])**2)
+               + np.sqrt((row['boundingBox3Xm'] - row['boundingBox4Xm'])**2 + (row['boundingBox3Ym'] - row['boundingBox4Ym'])**2))
+    W = 0.5 * (np.sqrt((row['boundingBox1Xm'] - row['boundingBox4Xm'])**2 + (row['boundingBox1Ym'] - row['boundingBox4Ym'])**2)
+               + np.sqrt((row['boundingBox2Xm'] - row['boundingBox3Xm'])**2 + (row['boundingBox2Ym'] - row['boundingBox3Ym'])**2))
     return L, W
 
 def get_velocity_components(speed, heading_deg):
@@ -50,7 +51,6 @@ def angle_diff(a1, a2):
     return diff
 
 class SafetyAnalyzer:
-    """加载数据，预处理，提供查询接口"""
     def __init__(self, meta_file, tracks_file):
         self.meta_file = meta_file
         self.tracks_file = tracks_file
@@ -59,141 +59,134 @@ class SafetyAnalyzer:
         self.df_tracks = load_tracks(tracks_file)
         self.frames = sorted(self.df_tracks['frameNum'].unique())
 
-        # 存储每帧的车辆信息
+        # 存储预处理后的数据
         self.frame_vehicles = {}          # frame -> {car_id: info}
-        # 存储每帧每个车道的排序车辆ID列表和车道方向
         self.frame_lane_vehicles = {}     # frame -> {lane_id: [car_id, ...]} 按投影距离排序
         self.frame_lane_direction = {}    # frame -> {lane_id: direction_rad}
 
-        self._preprocess()
-        self.calculator = SSMCalculator()  # 新增：创建SSM计算器实例
+        self._preprocess_pandas()
+        self.calculator = SSMCalculator()
 
-    def _preprocess(self):
-        """逐帧预处理，计算投影并建立索引"""
-        print("Preprocessing data...")
-        # 第一遍：收集原始信息
-        for frame in self.frames:
-            df_frame = self.df_tracks[self.df_tracks['frameNum'] == frame]
-            vehicles = {}
-            for _, row in df_frame.iterrows():
+    def _preprocess_pandas(self):
+        print("Preprocessing data")
+        df = self.df_tracks.copy()
+
+        df['x'] = df['carCenterXm']
+        df['y'] = df['carCenterYm']
+
+        L, W = compute_vehicle_dimensions(df)
+        df['L'] = L
+        df['W'] = W
+        rad = np.radians(df['heading'])
+        df['vx'] = df['speed'] * np.cos(rad)
+        df['vy'] = df['speed'] * np.sin(rad)
+
+        df = df.sort_values(['carId', 'frameNum']).reset_index(drop=True)
+
+        # 计算加速度和角速度
+        df['frame_diff'] = df.groupby('carId')['frameNum'].diff()
+        df['speed_diff'] = df.groupby('carId')['speed'].diff()
+        df['heading_diff'] = df.groupby('carId')['heading'].diff()
+
+        # 处理角度跳变
+        heading_diff = df['heading_diff'].copy()
+        mask_gt = heading_diff > 180
+        mask_lt = heading_diff < -180
+        heading_diff[mask_gt] -= 360
+        heading_diff[mask_lt] += 360
+
+        df['a'] = np.where(df['frame_diff'] == 1, df['speed_diff'] / self.dt, 0.0)
+        df['angle_speed'] = np.where(df['frame_diff'] == 1, heading_diff / self.dt, 0.0)
+
+        # 第一帧的加速度/角速度默认为0
+        df.drop(['frame_diff', 'speed_diff', 'heading_diff'], axis=1, inplace=True)
+
+        # 按帧和车道分组估计车道方向
+        def lane_direction(group):
+            headings = group['heading'].values
+            if len(headings) < 2:
+                return np.nan
+            sum_cos = np.sum(np.cos(np.radians(headings)))
+            sum_sin = np.sum(np.sin(np.radians(headings)))
+            return np.arctan2(sum_sin, sum_cos)
+
+        lane_dir_df = df.groupby(['frameNum', 'laneId']).apply(lane_direction).reset_index()
+        lane_dir_df.columns = ['frameNum', 'laneId', 'lane_dir_rad']
+        # 将车道方向合并回原数据
+        df = df.merge(lane_dir_df, on=['frameNum', 'laneId'], how='left')
+
+        # 计算投影距离、速度、加速度
+        mask = df['lane_dir_rad'].notna()
+        cosθ = np.cos(df.loc[mask, 'lane_dir_rad'])
+        sinθ = np.sin(df.loc[mask, 'lane_dir_rad'])
+        df.loc[mask, 'proj_dist'] = df.loc[mask, 'x'] * cosθ + df.loc[mask, 'y'] * sinθ
+        df.loc[mask, 'proj_speed'] = df.loc[mask, 'vx'] * cosθ + df.loc[mask, 'vy'] * sinθ
+        # 计算投影加速度：需要 heading 与车道方向的夹角
+        delta = np.radians(df.loc[mask, 'heading']) - df.loc[mask, 'lane_dir_rad']
+        df.loc[mask, 'proj_acc'] = df.loc[mask, 'a'] * np.cos(delta)
+
+        # 构建 frame_vehicles 和 frame_lane_* 字典
+        for frame, group in df.groupby('frameNum'):
+            veh_dict = {}
+            lane_dict = defaultdict(list)
+            lane_dir_dict = {}
+
+            # 按 laneId 分组，用于构建排序列表
+            for lane, lane_group in group.groupby('laneId'):
+                # 按投影距离排序
+                if lane_group['proj_dist'].notna().any():
+                    lane_group_sorted = lane_group.sort_values('proj_dist')
+                    car_ids = lane_group_sorted['carId'].tolist()
+                    lane_dict[lane] = car_ids
+                else:
+                    lane_dict[lane] = lane_group['carId'].tolist()
+                # 车道方向（取该车道第一个有效值）
+                lane_dir = lane_group['lane_dir_rad'].iloc[0]
+                if not pd.isna(lane_dir):
+                    lane_dir_dict[lane] = lane_dir
+
+            # 构建每辆车的 info 字典
+            for _, row in group.iterrows():
                 carId = int(row['carId'])
-                x = row['carCenterXm']
-                y = row['carCenterYm']
-                speed = row['speed']
-                heading = row['heading']
-                vx, vy = get_velocity_components(speed, heading)
-                L, W = compute_vehicle_dimensions(row)
-                laneId = row['laneId'] if pd.notna(row['laneId']) else -1
-                obj_class = int(row['objClass']) if pd.notna(row['objClass']) else -1
-
-                bbox = [
-                    (row['boundingBox1Xm'], row['boundingBox1Ym']),
-                    (row['boundingBox2Xm'], row['boundingBox2Ym']),
-                    (row['boundingBox3Xm'], row['boundingBox3Ym']),
-                    (row['boundingBox4Xm'], row['boundingBox4Ym'])
-                ]
-
-                # 加速度和角速度暂时设为0，后面统一计算
-                a = 0.0
-                angle_speed = 0.0
-
                 info = {
-                    'x': x, 'y': y, 'vx': vx, 'vy': vy, 'L': L, 'W': W,
-                    'laneId': laneId, 'class': obj_class, 'heading': heading,
-                    'speed': speed, 'a': a, 'angle_speed': angle_speed,
-                    'bbox': bbox
+                    'x': row['x'], 'y': row['y'],
+                    'vx': row['vx'], 'vy': row['vy'],
+                    'L': row['L'], 'W': row['W'],
+                    'laneId': int(row['laneId']) if not pd.isna(row['laneId']) else -1,
+                    'class': int(row['objClass']) if not pd.isna(row['objClass']) else -1,
+                    'heading': row['heading'],
+                    'speed': row['speed'],
+                    'a': row['a'],
+                    'angle_speed': row['angle_speed'],
+                    'bbox': [
+                        (row['boundingBox1Xm'], row['boundingBox1Ym']),
+                        (row['boundingBox2Xm'], row['boundingBox2Ym']),
+                        (row['boundingBox3Xm'], row['boundingBox3Ym']),
+                        (row['boundingBox4Xm'], row['boundingBox4Ym'])
+                    ],
+                    'proj_dist': row.get('proj_dist', None),
+                    'proj_speed': row.get('proj_speed', None),
+                    'proj_acc': row.get('proj_acc', None)
                 }
-                vehicles[carId] = info
-            self.frame_vehicles[frame] = vehicles
+                veh_dict[carId] = info
 
-        # 第二遍：计算加速度和角速度（基于前后帧）
-        for frame in self.frames:
-            if frame == 0:
-                continue
-            prev_vehicles = self.frame_vehicles.get(frame-1, {})
-            curr_vehicles = self.frame_vehicles[frame]
-            for cid, info in curr_vehicles.items():
-                if cid in prev_vehicles:
-                    prev = prev_vehicles[cid]
-                    dv = info['speed'] - prev['speed']
-                    info['a'] = dv / self.dt
-                    d_heading = info['heading'] - prev['heading']
-                    if d_heading > 180:
-                        d_heading -= 360
-                    elif d_heading < -180:
-                        d_heading += 360
-                    info['angle_speed'] = d_heading / self.dt
-
-        # 第三遍：按车道分组，估计方向，计算投影
-        for frame in self.frames:
-            vehicles = self.frame_vehicles[frame]
-            lane_groups = defaultdict(list)
-            for cid, info in vehicles.items():
-                lane = info['laneId']
-                lane_groups[lane].append((cid, info))
-
-            lane_directions = {}
-            lane_sorted_lists = defaultdict(list)
-
-            for lane, group in lane_groups.items():
-                # 估计车道方向
-                heading_list = [info['heading'] for _, info in group]
-                dir_rad = self._estimate_direction_from_headings(heading_list)
-                if dir_rad is None:
-                    continue
-                lane_directions[lane] = dir_rad
-                cosθ, sinθ = np.cos(dir_rad), np.sin(dir_rad)
-
-                # 计算每个车辆的投影距离、速度、加速度
-                proj_list = []
-                for cid, info in group:
-                    proj_dist = info['x'] * cosθ + info['y'] * sinθ
-                    proj_speed = info['vx'] * cosθ + info['vy'] * sinθ
-                    delta = np.radians(info['heading']) - dir_rad
-                    proj_acc = info['a'] * np.cos(delta)
-                    info['proj_dist'] = proj_dist
-                    info['proj_speed'] = proj_speed
-                    info['proj_acc'] = proj_acc
-                    proj_list.append((proj_dist, cid))
-
-                proj_list.sort()
-                lane_sorted_lists[lane] = [cid for _, cid in proj_list]
-
-            self.frame_lane_vehicles[frame] = dict(lane_sorted_lists)
-            self.frame_lane_direction[frame] = lane_directions
+            self.frame_vehicles[frame] = veh_dict
+            self.frame_lane_vehicles[frame] = dict(lane_dict)
+            self.frame_lane_direction[frame] = lane_dir_dict
 
         print("Preprocessing done.")
 
-    def _estimate_direction_from_headings(self, headings):
-        """从航向列表估计平均方向（弧度）"""
-        if len(headings) < 2:
-            return None
-        sum_cos = 0.0
-        sum_sin = 0.0
-        for h in headings:
-            rad = np.radians(h)
-            sum_cos += np.cos(rad)
-            sum_sin += np.sin(rad)
-        mean_cos = sum_cos / len(headings)
-        mean_sin = sum_sin / len(headings)
-        return np.arctan2(mean_sin, mean_cos)
-
     def get_vehicle_info(self, frame, car_id):
-        """返回指定帧的车辆信息字典，如果不存在返回 None"""
         if frame in self.frame_vehicles and car_id in self.frame_vehicles[frame]:
             return self.frame_vehicles[frame][car_id]
         return None
 
     def get_surrounding_vehicles(self, frame, ego_id):
-        """
-        返回主车周围最多6辆车的列表，每个元素为 (target_id, relation)
-        relation 取值为 'front', 'rear', 'left_front', 'left_rear', 'right_front', 'right_rear'
-        """
         if frame not in self.frame_vehicles or ego_id not in self.frame_vehicles[frame]:
             return []
         ego_info = self.frame_vehicles[frame][ego_id]
         ego_lane = ego_info['laneId']
-        if ego_lane not in self.frame_lane_vehicles[frame]:
+        if ego_lane not in self.frame_lane_vehicles.get(frame, {}):
             return []
 
         lane_list = self.frame_lane_vehicles[frame][ego_lane]
@@ -203,58 +196,47 @@ class SafetyAnalyzer:
             return []
 
         surrounding = []
-
-        # 同一车道的前后
-        # if idx > 0:
-        #     surrounding.append((lane_list[idx-1], 'rear'))
+        # 同车道前方
         if idx < len(lane_list)-1:
             surrounding.append((lane_list[idx+1], 'front'))
 
-        # 左右车道
         ego_dir = self.frame_lane_direction[frame].get(ego_lane)
         if ego_dir is None:
             return surrounding
 
-        # 左车道（laneId - 1）
+        # 左车道
         left_lane = ego_lane - 1
-        if left_lane in self.frame_lane_vehicles[frame]:
+        if left_lane in self.frame_lane_vehicles.get(frame, {}):
             left_dir = self.frame_lane_direction[frame].get(left_lane)
-            if left_dir is not None and abs(angle_diff(np.degrees(ego_dir), np.degrees(left_dir))) < 45:  # 同向阈值45度
+            if left_dir is not None and abs(angle_diff(np.degrees(ego_dir), np.degrees(left_dir))) < 45:
                 left_list = self.frame_lane_vehicles[frame][left_lane]
                 ego_proj = ego_info['proj_dist']
                 proj_left = [self.frame_vehicles[frame][cid]['proj_dist'] for cid in left_list]
                 pos = bisect.bisect_left(proj_left, ego_proj)
-                # if pos > 0:
-                #     surrounding.append((left_list[pos-1], 'left_rear'))
                 if pos < len(left_list):
                     surrounding.append((left_list[pos], 'left_front'))
 
-        # 右车道（laneId + 1）
+        # 右车道
         right_lane = ego_lane + 1
-        if right_lane in self.frame_lane_vehicles[frame]:
+        if right_lane in self.frame_lane_vehicles.get(frame, {}):
             right_dir = self.frame_lane_direction[frame].get(right_lane)
             if right_dir is not None and abs(angle_diff(np.degrees(ego_dir), np.degrees(right_dir))) < 45:
                 right_list = self.frame_lane_vehicles[frame][right_lane]
                 ego_proj = ego_info['proj_dist']
                 proj_right = [self.frame_vehicles[frame][cid]['proj_dist'] for cid in right_list]
                 pos = bisect.bisect_left(proj_right, ego_proj)
-                # if pos > 0:
-                #     surrounding.append((right_list[pos-1], 'right_rear'))
                 if pos < len(right_list):
                     surrounding.append((right_list[pos], 'right_front'))
 
         return surrounding
 
     def get_frame_range(self):
-        """返回所有帧列表"""
         return self.frames
 
     def get_upper_lower_marks(self):
         return self.upper_marks, self.lower_marks
 
-    # ===== 计算两车之间的SSM指标 =====
     def compute_ssm_for_pair(self, frame, id1, id2):
-        """计算两车在指定帧的SSM指标"""
         v1 = self.get_vehicle_info(frame, id1)
         v2 = self.get_vehicle_info(frame, id2)
         if v1 is None or v2 is None:
@@ -267,7 +249,7 @@ class SafetyAnalyzer:
             lane = v1['laneId']
             lane_dir = self.frame_lane_direction[frame].get(lane)
             if lane_dir is None:
-                same_lane = False  # 无法确定方向，则视为不同车道
+                same_lane = False
             else:
                 proj_dist1 = v1.get('proj_dist')
                 proj_dist2 = v2.get('proj_dist')
@@ -276,7 +258,6 @@ class SafetyAnalyzer:
                 proj_acc1 = v1.get('proj_acc')
                 proj_acc2 = v2.get('proj_acc')
 
-        # 使用内部 calculator 计算
         result = self.calculator.compute_for_pair(
             v1, v2,
             same_lane=same_lane,
