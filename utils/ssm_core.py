@@ -47,32 +47,100 @@ def compute_cai(v_f, a_f, v_l, a_l, mttc):
     term_l = v_l + a_l * mttc
     return 0.5 * (term_f**2 - term_l**2) / mttc
 
-def compute_2d_ttc(p1, v1, r1, p2, v2, r2):
+def compute_cpi_from_drac_history(drac_history, vehicle_class_madr, dt):
     """
-    计算两圆盘（中心点p1, p2，速度v1, v2，半径r1, r2）的碰撞时间。
-    返回最小正时间（秒），若无碰撞可能则返回inf。
+    根据某辆车的DRAC历史记录计算CPI。
+    参数：
+        drac_history: list of (frame, drac, class)
+        vehicle_class_madr: dict, 车辆类型到MADR的映射
+        dt: 时间步长
+    返回：
+        CPI值
     """
-    p_rel = np.array(p2) - np.array(p1)
-    v_rel = np.array(v2) - np.array(v1)
-    a = np.dot(v_rel, v_rel)
-    if a < 1e-12:
-        # 相对速度为零，若距离已小于半径和则已碰撞，否则不会碰撞
-        if np.linalg.norm(p_rel) <= r1 + r2:
-            return 0.0
-        else:
+    if not drac_history:
+        return 0.0
+    drac_history.sort(key=lambda x: x[0])
+    total_time = len(drac_history) * dt
+    veh_class = drac_history[0][2]
+    madr = vehicle_class_madr.get(veh_class, vehicle_class_madr.get(-1, 3.0))
+    risky_time = sum(dt for _, drac, _ in drac_history if drac >= madr)
+    cpi = risky_time / total_time if total_time > 0 else 0
+    return cpi
+
+def compute_tet_tit_from_history(ttc_history, dt, threshold):
+    """
+    根据一段连续帧的 TTC 历史计算 TET 和 TIT。
+    ttc_history: list of float，按帧顺序排列的有效 TTC 值（已过滤 inf）
+    dt: 时间步长（秒）
+    threshold: TTC 阈值
+    返回 (TET, TIT)
+    """
+    TET = 0.0
+    TIT = 0.0
+    for ttc in ttc_history:
+        if ttc < threshold:
+            TET += dt
+            TIT += (1.0 / ttc - 1.0 / threshold) * dt
+    return TET, TIT
+
+# 基于Bounding Box的2D TTC计算
+def compute_2d_ttc_bbox(veh1, veh2, param1, param2, scale=1.0):
+    """
+    计算两车（视为有朝向的矩形）在当前运动状态下的碰撞时间。
+    基于最近点连线的投影，并考虑角速度的影响。
+    
+    参数：
+        veh1, veh2: 四个顶点坐标的列表（无序）
+        param1, param2: (speed, acceleration, heading_deg, angular_speed_deg)
+        scale: 距离缩放因子
+    返回：
+        碰撞时间
+    """
+    point1, point2, distance = calculate_nearest_points(veh1, veh2)
+    if distance <= 0:
+        return 0.0 
+
+    # 计算最近点连线的方向角（从 point1 指向 point2）
+    dx = point2[0] - point1[0]
+    dy = point2[1] - point1[1]
+    alpha = math.atan2(dy, dx)
+
+    # 将两车的速度、加速度投影到连线方向
+    v1, a1 = _project_to_line(param1[0], param1[1], np.radians(param1[2]), alpha)
+    v2, a2 = _project_to_line(param2[0], param2[1], np.radians(param2[2]), alpha)
+
+    v_rel = v1 - v2
+    a_rel = a1 - a2
+
+    # 角速度影响：两车角速度之和（弧度/秒），用于修正相对速度
+    w = np.radians(param1[3] + param2[3])
+
+    # 求解二次方程： 0.5 * a_rel * t^2 + (v_rel + w * distance) * t - distance = 0
+    distance = distance * scale
+    if a_rel == 0:
+        # 线性情况
+        if v_rel + w * distance <= 0:
             return np.inf
-    b = 2 * np.dot(p_rel, v_rel)
-    c = np.dot(p_rel, p_rel) - (r1 + r2)**2
-    disc = b**2 - 4*a*c
+        t = distance / (v_rel + w * distance)
+        return t if t > 0 else np.inf
+
+    disc = (v_rel + w * distance) ** 2 + 2 * a_rel * distance
     if disc < 0:
         return np.inf
     sqrt_disc = math.sqrt(disc)
-    t1 = (-b - sqrt_disc) / (2*a)
-    t2 = (-b + sqrt_disc) / (2*a)
+    t1 = (- (v_rel + w * distance) - sqrt_disc) / a_rel
+    t2 = (- (v_rel + w * distance) + sqrt_disc) / a_rel
     candidates = [t for t in (t1, t2) if t > 1e-6]
     if not candidates:
         return np.inf
     return min(candidates)
+
+def _project_to_line(v, a, theta, alpha):
+    #将速度和加速度投影到给定方向 alpha 上
+    delta = theta - alpha
+    v_proj = v * np.cos(delta)
+    a_proj = a * np.cos(delta)
+    return v_proj, a_proj
 
 def ray_intersection(p1, theta1, p2, theta2):
     """
@@ -104,7 +172,7 @@ def ray_intersection(p1, theta1, p2, theta2):
     return None
 
 def compute_pet(v1xcenter, v1ycenter, param1, v2xcenter, v2ycenter, param2, angle_diff):
-    """计算后侵入时间（仅适用于交叉冲突）"""
+    #计算后侵入时间
     if angle_diff < THRESHOLD_MIN_ANGLE or angle_diff > THRESHOLD_MAX_ANGLE:
         return np.inf
 
@@ -162,16 +230,11 @@ class SSMCalculator:
             '2D_TTC': np.inf
         }
 
-        # 计算2D TTC（对所有车辆对，无论角度如何）
-        r1 = math.hypot(veh1['L'], veh1['W']) / 2.0   # 外接圆半径
-        r2 = math.hypot(veh2['L'], veh2['W']) / 2.0
-        p1 = (veh1['x'], veh1['y'])
-        p2 = (veh2['x'], veh2['y'])
-        v1 = (veh1['vx'], veh1['vy'])
-        v2 = (veh2['vx'], veh2['vy'])
-        result['2D_TTC'] = compute_2d_ttc(p1, v1, r1, p2, v2, r2)
+        param1 = (veh1['speed'], veh1['a'], veh1['heading'], veh1['angle_speed'])
+        param2 = (veh2['speed'], veh2['a'], veh2['heading'], veh2['angle_speed'])
+        result['2D_TTC'] = compute_2d_ttc_bbox(veh1['bbox'], veh2['bbox'], param1, param2)
 
-        # 计算PET（仅当角度在特定范围内时）
+        # 计算PET
         diff = self._angle_diff(veh1['heading'], veh2['heading'])
         if THRESHOLD_MIN_ANGLE <= diff <= THRESHOLD_MAX_ANGLE:
             param1 = (veh1['speed'], veh1['a'], veh1['heading'], veh1['angle_speed'])
@@ -179,9 +242,9 @@ class SSMCalculator:
             pet = compute_pet(veh1['x'], veh1['y'], param1, veh2['x'], veh2['y'], param2, diff)
             result['PET'] = pet
 
-        # 1D 指标（同车道且满足跟驰条件）
+        # 1D 指标
         if same_lane and proj_dist1 is not None and proj_dist2 is not None:
-            # 根据投影距离确定前后车（较小者为后车）
+            # 根据投影距离确定前后车
             if proj_dist1 < proj_dist2:
                 follow = veh1
                 lead = veh2
@@ -220,42 +283,3 @@ class SSMCalculator:
         if diff > 180:
             diff = 360 - diff
         return diff
-
-    @staticmethod
-    def compute_cpi_from_drac_history(drac_history, vehicle_class_madr, dt):
-        """
-        根据某辆车的DRAC历史记录计算CPI。
-        参数：
-            drac_history: list of (frame, drac, class)
-            vehicle_class_madr: dict, 车辆类型到MADR的映射
-            dt: 时间步长
-        返回：
-            CPI值
-        """
-        if not drac_history:
-            return 0.0
-        drac_history.sort(key=lambda x: x[0])
-        total_time = len(drac_history) * dt
-        veh_class = drac_history[0][2]
-        madr = vehicle_class_madr.get(veh_class, vehicle_class_madr.get(-1, 3.0))
-        risky_time = sum(dt for _, drac, _ in drac_history if drac >= madr)
-        cpi = risky_time / total_time if total_time > 0 else 0
-        return cpi
-
-    
-    @staticmethod
-    def compute_tet_tit_from_history(ttc_history, dt, threshold):
-        """
-        根据一段连续帧的 TTC 历史计算 TET 和 TIT。
-        ttc_history: list of float，按帧顺序排列的有效 TTC 值（已过滤 inf）
-        dt: 时间步长（秒）
-        threshold: TTC 阈值
-        返回 (TET, TIT)
-        """
-        TET = 0.0
-        TIT = 0.0
-        for ttc in ttc_history:
-            if ttc < threshold:
-                TET += dt
-                TIT += (1.0 / ttc - 1.0 / threshold) * dt
-        return TET, TIT
