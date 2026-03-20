@@ -52,7 +52,7 @@ The coordinate relationship between the provided trajectory position and the bas
 
 | Variable | Value |
 |----------|-------|
-| pix2meter | 17.912853 pixel = 1 meter |
+| pix2meter | ExpresswayA: 17.912853 pixel = 1 meter; other scenes: — |
 | imgLon\*1, imgLat\*1 | (no GPS coordinates provided) |
 | imgLon\*2, imgLat\*2 | — |
 | imgLon\*3, imgLat\*3 | — |
@@ -84,70 +84,21 @@ The coordinate relationship between the provided trajectory position and the bas
 | map | XX_highway.png (one per recording) |
 | laneRange | upperLaneMarkings / lowerLaneMarkings (see recordingMeta) |
 
-**Recording Details** (60 recordings):
+**Recording Details** (60 recordings across 11 days):
 
-| recordingId | month | weekDay | startTime |
-|------------|-------|---------|-----------|
-| 1 | 9.2017 | Tue | 08:38 |
-| 2 | 9.2017 | Tue | 09:04 |
-| 3 | 9.2017 | Tue | 09:54 |
-| 4 | 9.2017 | Thu | 11:16 |
-| 5 | 9.2017 | Thu | 11:41 |
-| 6 | 9.2017 | Thu | 12:06 |
-| 7 | 9.2017 | Fri | 08:21 |
-| 8 | 9.2017 | Fri | 08:37 |
-| 9 | 9.2017 | Fri | 09:24 |
-| 10 | 9.2017 | Fri | 10:36 |
-| 11 | 9.2017 | Thu | 16:18 |
-| 12 | 9.2017 | Thu | 17:21 |
-| 13 | 9.2017 | Thu | 18:04 |
-| 14 | 9.2017 | Thu | 18:28 |
-| 15 | 9.2017 | Fri | 08:49 |
-| 16 | 9.2017 | Fri | 09:11 |
-| 17 | 9.2017 | Fri | 09:35 |
-| 18 | 9.2017 | Fri | 10:07 |
-| 19 | 9.2017 | Fri | 10:24 |
-| 20 | 9.2017 | Fri | 10:47 |
-| 21 | 9.2017 | Fri | 11:10 |
-| 22 | 9.2017 | Fri | 11:44 |
-| 23 | 9.2017 | Fri | 12:06 |
-| 24 | 9.2017 | Fri | 12:27 |
-| 25 | 10.2017 | Mon | 08:55 |
-| 26 | 10.2017 | Mon | 09:20 |
-| 27 | 10.2017 | Mon | 09:46 |
-| 28 | 10.2017 | Mon | 10:12 |
-| 29 | 10.2017 | Mon | 10:39 |
-| 30 | 10.2017 | Mon | 11:03 |
-| 31 | 10.2017 | Mon | 11:28 |
-| 32 | 10.2017 | Mon | 12:20 |
-| 33 | 10.2017 | Mon | 12:41 |
-| 34 | 10.2017 | Mon | 13:34 |
-| 35 | 10.2017 | Wed | 11:26 |
-| 36 | 10.2017 | Wed | 11:09 |
-| 37 | 10.2017 | Wed | 11:55 |
-| 38 | 10.2017 | Wed | 12:20 |
-| 39 | 10.2017 | Mon | 09:04 |
-| 40 | 10.2017 | Mon | 09:30 |
-| 41 | 10.2017 | Mon | 10:41 |
-| 42 | 10.2017 | Mon | 11:05 |
-| 43 | 10.2017 | Mon | 11:31 |
-| 44 | 10.2017 | Mon | 11:54 |
-| 45 | 10.2017 | Mon | 12:23 |
-| 46 | 11.2017 | Wed | 08:47 |
-| 47 | 11.2017 | Wed | 09:15 |
-| 48 | 11.2017 | Wed | 09:38 |
-| 49 | 11.2017 | Wed | 10:02 |
-| 50 | 11.2017 | Wed | 11:38 |
-| 51 | 11.2017 | Wed | 12:05 |
-| 52 | 11.2017 | Wed | 12:30 |
-| 53 | 11.2017 | Wed | 13:15 |
-| 54 | 1.2018 | Thu | 09:16 |
-| 55 | 1.2018 | Thu | 09:39 |
-| 56 | 1.2018 | Thu | 10:04 |
-| 57 | 1.2018 | Thu | 10:26 |
-| 58 | 7.2018 | Wed | 09:15 |
-| 59 | 7.2018 | Wed | 09:23 |
-| 60 | 7.2018 | Wed | 09:37 |
+| month | weekDay | startTime | duration (min) |
+|-------|---------|-----------|----------------|
+| 9.2017 | Tue | 08:38 | 49 |
+| 9.2017 | Thu | 11:16 | 57 |
+| 9.2017 | Thu | 16:18 | 62 |
+| 9.2017 | Fri | 08:21 | 56 |
+| 9.2017 | Fri | 08:49 | 143 |
+| 10.2017 | Mon | 08:55 | 182 |
+| 10.2017 | Mon | 09:04 | 131 |
+| 10.2017 | Wed | 11:26 | 76 |
+| 11.2017 | Wed | 08:47 | 144 |
+| 1.2018 | Thu | 09:16 | 69 |
+| 7.2018 | Wed | 09:15 | 30 |
 
 The coordinate relationship between the provided trajectory position and the base map is shown in the figure.
 
@@ -157,7 +108,7 @@ The coordinate relationship between the provided trajectory position and the bas
 
 | Variable | Value |
 |----------|-------|
-| pix2meter | (highD does not provide a pixel-to-meter conversion factor; raw data coordinates are already in meters) |
+| pix2meter | — |
 | imgLon\*1, imgLat\*1 | (highD does not provide GPS coordinates) |
 | imgLon\*2, imgLat\*2 | — |
 | imgLon\*3, imgLat\*3 | — |
@@ -187,43 +138,19 @@ The coordinate relationship between the provided trajectory position and the bas
 | map | XX_background.png (one per recording) |
 | laneRange | Lanelet map files available (OSM format) |
 
-**Recording Details** (33 recordings):
+**Recording Details** (33 recordings across 9 days):
 
-| recordingId | weekday | startTime | localWeather |
-|------------|---------|-----------|-------------|
-| 0 | wednesday | 16:00 | — |
-| 1 | tuesday | 15:00 | — |
-| 2 | tuesday | 15:00 | — |
-| 3 | monday | 12:00 | — |
-| 4 | monday | 12:00 | — |
-| 5 | monday | 13:00 | — |
-| 6 | monday | 14:00 | — |
-| 7 | tuesday | — | — |
-| 8 | tuesday | — | — |
-| 9 | tuesday | — | — |
-| 10 | tuesday | — | — |
-| 11 | monday | 16:00 | — |
-| 12 | monday | 16:00 | — |
-| 13 | monday | 16:00 | — |
-| 14 | monday | 17:00 | — |
-| 15 | tuesday | 15:00 | — |
-| 16 | tuesday | 15:00 | — |
-| 17 | tuesday | 16:00 | — |
-| 18 | tuesday | 16:00 | — |
-| 19 | tuesday | 16:00 | — |
-| 20 | tuesday | 16:00 | — |
-| 21 | tuesday | 17:00 | — |
-| 22 | tuesday | 17:00 | — |
-| 23 | tuesday | 18:00 | — |
-| 24 | tuesday | 18:00 | — |
-| 25 | wednesday | 16:00 | — |
-| 26 | wednesday | 16:00 | — |
-| 27 | wednesday | 17:00 | — |
-| 28 | wednesday | 17:00 | — |
-| 29 | wednesday | 17:00 | — |
-| 30 | thursday | 13:00 | — |
-| 31 | thursday | 13:00 | — |
-| 32 | thursday | 14:00 | — |
+| weekday | startTime | duration (min) | localWeather |
+|---------|-----------|----------------|-------------|
+| wednesday | 16:00 | 16 | — |
+| tuesday | 15:00 | 32 | — |
+| monday | 12:00 | 62 | — |
+| tuesday | — | 63 | — |
+| monday | 16:00 | 67 | — |
+| tuesday | 15:00 | 56 | — |
+| tuesday | 16:00 | 135 | — |
+| wednesday | 16:00 | 107 | — |
+| thursday | 13:00 | 51 | — |
 
 The coordinate relationship between the provided trajectory position and the base map is shown in the figure.
 
@@ -265,34 +192,15 @@ The coordinate relationship between the provided trajectory position and the bas
 | map | XX_background.png (one per recording) |
 | laneRange | — |
 
-**Recording Details** (24 recordings):
+**Recording Details** (24 recordings across 5 days):
 
-| recordingId | weekday | startTime | localWeather |
-|------------|---------|-----------|-------------|
-| 0 | tuesday | 07:00 | — |
-| 1 | wednesday | 11:00 | — |
-| 2 | thursday | 09:00 | — |
-| 3 | thursday | 09:00 | — |
-| 4 | thursday | 09:00 | — |
-| 5 | thursday | 10:00 | — |
-| 6 | thursday | 10:00 | — |
-| 7 | thursday | 10:00 | — |
-| 8 | thursday | 11:00 | — |
-| 9 | tuesday | 09:00 | — |
-| 10 | tuesday | 09:00 | — |
-| 11 | tuesday | 10:00 | — |
-| 12 | tuesday | 11:00 | — |
-| 13 | tuesday | 11:00 | — |
-| 14 | tuesday | 11:00 | — |
-| 15 | tuesday | 12:00 | — |
-| 16 | tuesday | 12:00 | — |
-| 17 | tuesday | 15:00 | — |
-| 18 | tuesday | 15:00 | — |
-| 19 | tuesday | 16:00 | — |
-| 20 | wednesday | 09:00 | — |
-| 21 | wednesday | 09:00 | — |
-| 22 | wednesday | 10:00 | — |
-| 23 | wednesday | 10:00 | — |
+| weekday | startTime | duration (min) | localWeather |
+|---------|-----------|----------------|-------------|
+| tuesday | 07:00 | 17 | — |
+| wednesday | 11:00 | 18 | — |
+| thursday | 09:00 | 123 | — |
+| tuesday | 09:00 | 166 | — |
+| wednesday | 09:00 | 73 | — |
 
 The coordinate relationship between the provided trajectory position and the base map is shown in the figure.
 
@@ -351,7 +259,7 @@ The coordinate relationship between the provided trajectory position and the bas
 
 | Variable | Value |
 |----------|-------|
-| pix2meter | 1.0 (placeholder; NGSIM coordinates are converted to metric local coordinate system, pixel coords = metric coords) |
+| pix2meter | — |
 | imgLon\*1, imgLat\*1 | (NGSIM raw data uses Global_X/Y in feet, no map corner GPS coordinates) |
 | imgLon\*2, imgLat\*2 | — |
 | imgLon\*3, imgLat\*3 | — |
