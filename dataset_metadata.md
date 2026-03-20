@@ -16,33 +16,117 @@ This document organizes the **Meta Data** and **Intermediate Variables** for 5 t
 |-------|-------|
 | datasetName | CitySim |
 | siteName | See site list below |
-| recordingDate | (not provided by dataset) |
-| weekDay | (not provided by dataset) |
-| localWeather | (pending local historical weather lookup) |
-| recordingTime | (not provided by dataset) |
+| recordingDate | 2022-03-03 ~ 2022-11-29 (see recording details below) |
+| weekDay | Sun, Mon, Wed, Thu, Fri, Sat (see recording details below) |
+| localWeather | See recording details below |
+| recordingTime | See recording details below |
 | recordingFrameRate | 30 FPS |
 | totalFrames | See recording details below |
-| duration | ~1140 minutes of drone video in total |
+| duration | ~977 minutes of drone video in total |
 | map | Per-scene background maps in `main/CitySim/` |
 | laneRange | laneId field available in data |
 
 **Site List** (13 scenes):
 
-| Scene | Road Type | Country |
-|-------|-----------|---------|
-| IntersectionA | Intersection (University@Alafaya, Signalized) | USA |
-| IntersectionB | Intersection (McCulloch@Seminole, Non-signalized) | USA |
-| IntersectionC | Intersection (University@McCulloch, Signalized) | USA |
-| IntersectionD | Intersection (GarageC, Consecutive signalized) | USA |
-| IntersectionE | Intersection (Permissive left turn phasing) | USA |
-| IntersectionF | Intersection (Non-signalized) | USA |
-| RoundaboutA | Roundabout (Single lane) | USA |
-| RoundaboutB | Roundabout (Two lane) | USA |
-| ExpresswayA | Expressway (Weaving segment) | China |
-| ExpresswayB | Expressway (Weaving segment) | China |
-| FreewayB | Freeway (Basic segment) | China |
-| FreewayC | Freeway (Merge/diverge) | China |
-| FreewayD | Freeway (Merge/diverge) | China |
+| Scene | Road Type | Location | Country |
+|-------|-----------|----------|---------|
+| IntersectionA | Intersection (University@Alafaya, Signalized) | Orlando, FL | USA |
+| IntersectionB | Intersection (McCulloch@Seminole, Non-signalized) | Orlando, FL | USA |
+| IntersectionC | Intersection (University@McCulloch, Signalized) | Orlando, FL | USA |
+| IntersectionD | Intersection (GarageC, Consecutive signalized) | Orlando, FL | USA |
+| IntersectionE | Intersection (county@oviedo, Permissive left turn phasing) | Oviedo, FL | USA |
+| IntersectionF | Intersection (Publix, Non-signalized) | Orlando, FL | USA |
+| RoundaboutA | Roundabout (Tampa, Single lane) | Tampa, FL | USA |
+| RoundaboutB | Roundabout (WaterForLake, Two lane) | Orlando, FL | USA |
+| ExpresswayA | Expressway (Weaving segment) | Chengdu (SWJTU) | China |
+| ExpresswayB | Expressway (Weaving segment) | Nanjing (SEU) | China |
+| FreewayB | Freeway (Basic segment) | Chengdu (SWJTU) | China |
+| FreewayC | Freeway (Merge/diverge) | Chengdu (SWJTU) | China |
+| FreewayD | Freeway (Merge/diverge) | Hong Kong (PolyU) | China |
+
+**Recording Details** (per-scene, per-day):
+
+> Note: Dates were decoded from recording filenames (e.g. `031822Pm02` → 2022-03-18 PM). Time information is from the `data processing.xlsx`. Weather was looked up from [timeanddate.com](https://www.timeanddate.com) historical records for each location and date.
+
+**ExpresswayA** (Chengdu, China):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-03-18 | Friday | 17:15 | 66 | Sunny |
+| 2022-03-19 | Saturday | 08:16 | 66 | Passing clouds |
+
+**FreewayB** (Chengdu, China):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-06-05 | Sunday | 05:15 | 34 | Sunny |
+
+**FreewayC** (Chengdu, China):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-06-05 | Sunday | 05:40 | 23 | Sunny |
+| 2022-06-09 | Thursday | 05:15 | 39 | Fog / Scattered clouds |
+
+**IntersectionA / University@Alafaya** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-03-03 | Thursday | 17:40 | 60 | Sunny |
+
+**IntersectionB / McCulloch@Seminole** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| — | — | 17:30 | 50 | — |
+
+> Note: IntersectionB recording filenames do not encode date information; date and weather are unknown.
+
+**IntersectionD / GarageC** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-03-16 | Wednesday | 17:30 | 15 | Partly sunny |
+
+**IntersectionD V2 / GarageC V2** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-03-16 | Wednesday | AM | 99 | Partly sunny |
+| 2022-05-30 | Monday | AM | 58 | Mostly sunny |
+
+**IntersectionE / county@oviedo** (Oviedo, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-11-18 | Friday | 17:30 | 52 | Sunny |
+
+**IntersectionF / Publix** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-05-04 | Wednesday | 17:30 | — | Scattered clouds |
+
+**RoundaboutA / TampaRoundabout** (Tampa, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-11-29 | Tuesday | AM | 115 | Sunny |
+
+**RoundaboutB / WaterForLake** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-11-18 | Friday | 17:30 | 60 | Sunny |
+
+**Other scenes** (DDI, I-4 Express Lane Exit, ExpresswayB, FreewayD):
+
+| Scene | Date | localWeather | Note |
+|-------|------|-------------|------|
+| DDI | — | — | No date/time in filename |
+| I-4 Express Lane Exit | — | — | No date in filename |
+| ExpresswayB | — | — | No recordings in data processing spreadsheet |
+| FreewayD | — | — | No recordings in data processing spreadsheet |
 
 The coordinate relationship between the provided trajectory position and the base map is shown in the figure.
 
