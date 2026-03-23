@@ -8,7 +8,7 @@ def visualize_event(frame, v1, v2, id1, id2, point1, point2, indicators,
                     save_dir="./visualization", show=False, save=True):
     """
     绘制事件场景。
-    indicators: 字典，包含 'TTC','MTTC','DRAC','CAI','PET','2D_TTC' 的值（或 None）
+    indicators: 字典，包含 SSM 数值及可选字符串 conflict_type 等
     图片将保存在 save_dir/id1_id2/ 目录下。
     """
     bbox1 = order_rect_points(v1['bbox'])
@@ -41,8 +41,12 @@ def visualize_event(frame, v1, v2, id1, id2, point1, point2, indicators,
 
     triggered = []
     for name, value in indicators.items():
-        if value is not None:
-            triggered.append(f"{name}={value:.3f}")
+        if value is None:
+            continue
+        if isinstance(value, str):
+            triggered.append(f"{name}={value}")
+        else:
+            triggered.append(f"{name}={float(value):.3f}")
     title = f"Frame {frame} - " + ", ".join(triggered) if triggered else f"Frame {frame}"
 
     plt.title(title)
