@@ -16,33 +16,117 @@ This document organizes the **Meta Data** and **Intermediate Variables** for 5 t
 |-------|-------|
 | datasetName | CitySim |
 | siteName | See site list below |
-| recordingDate | (not provided by dataset) |
-| weekDay | (not provided by dataset) |
-| localWeather | (pending local historical weather lookup) |
-| recordingTime | (not provided by dataset) |
+| recordingDate | 2022-03-03 ~ 2022-11-29 (see recording details below) |
+| weekDay | Sun, Mon, Wed, Thu, Fri, Sat (see recording details below) |
+| localWeather | See recording details below |
+| recordingTime | See recording details below |
 | recordingFrameRate | 30 FPS |
 | totalFrames | See recording details below |
-| duration | ~1140 minutes of drone video in total |
+| duration | ~977 minutes of drone video in total |
 | map | Per-scene background maps in `main/CitySim/` |
 | laneRange | laneId field available in data |
 
 **Site List** (13 scenes):
 
-| Scene | Road Type | Country |
-|-------|-----------|---------|
-| IntersectionA | Intersection (University@Alafaya, Signalized) | USA |
-| IntersectionB | Intersection (McCulloch@Seminole, Non-signalized) | USA |
-| IntersectionC | Intersection (University@McCulloch, Signalized) | USA |
-| IntersectionD | Intersection (GarageC, Consecutive signalized) | USA |
-| IntersectionE | Intersection (Permissive left turn phasing) | USA |
-| IntersectionF | Intersection (Non-signalized) | USA |
-| RoundaboutA | Roundabout (Single lane) | USA |
-| RoundaboutB | Roundabout (Two lane) | USA |
-| ExpresswayA | Expressway (Weaving segment) | China |
-| ExpresswayB | Expressway (Weaving segment) | China |
-| FreewayB | Freeway (Basic segment) | China |
-| FreewayC | Freeway (Merge/diverge) | China |
-| FreewayD | Freeway (Merge/diverge) | China |
+| Scene | Road Type | Location | Country |
+|-------|-----------|----------|---------|
+| IntersectionA | Intersection (University@Alafaya, Signalized) | Orlando, FL | USA |
+| IntersectionB | Intersection (McCulloch@Seminole, Non-signalized) | Orlando, FL | USA |
+| IntersectionC | Intersection (University@McCulloch, Signalized) | Orlando, FL | USA |
+| IntersectionD | Intersection (GarageC, Consecutive signalized) | Orlando, FL | USA |
+| IntersectionE | Intersection (county@oviedo, Permissive left turn phasing) | Oviedo, FL | USA |
+| IntersectionF | Intersection (Publix, Non-signalized) | Orlando, FL | USA |
+| RoundaboutA | Roundabout (Tampa, Single lane) | Tampa, FL | USA |
+| RoundaboutB | Roundabout (WaterForLake, Two lane) | Orlando, FL | USA |
+| ExpresswayA | Expressway (Weaving segment) | Chengdu (SWJTU) | China |
+| ExpresswayB | Expressway (Weaving segment) | Nanjing (SEU) | China |
+| FreewayB | Freeway (Basic segment) | Chengdu (SWJTU) | China |
+| FreewayC | Freeway (Merge/diverge) | Chengdu (SWJTU) | China |
+| FreewayD | Freeway (Merge/diverge) | Hong Kong (PolyU) | China |
+
+**Recording Details** (per-scene, per-day):
+
+> Note: Dates were decoded from recording filenames (e.g. `031822Pm02` → 2022-03-18 PM). Time information is from the `data processing.xlsx`. Weather was looked up from [timeanddate.com](https://www.timeanddate.com) historical records for each location and date.
+
+**ExpresswayA** (Chengdu, China):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-03-18 | Friday | 17:15 | 66 | Sunny |
+| 2022-03-19 | Saturday | 08:16 | 66 | Passing clouds |
+
+**FreewayB** (Chengdu, China):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-06-05 | Sunday | 05:15 | 34 | Sunny |
+
+**FreewayC** (Chengdu, China):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-06-05 | Sunday | 05:40 | 23 | Sunny |
+| 2022-06-09 | Thursday | 05:15 | 39 | Fog / Scattered clouds |
+
+**IntersectionA / University@Alafaya** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-03-03 | Thursday | 17:40 | 60 | Sunny |
+
+**IntersectionB / McCulloch@Seminole** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| — | — | 17:30 | 50 | — |
+
+> Note: IntersectionB recording filenames do not encode date information; date and weather are unknown.
+
+**IntersectionD / GarageC** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-03-16 | Wednesday | 17:30 | 15 | Partly sunny |
+
+**IntersectionD V2 / GarageC V2** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-03-16 | Wednesday | AM | 99 | Partly sunny |
+| 2022-05-30 | Monday | AM | 58 | Mostly sunny |
+
+**IntersectionE / county@oviedo** (Oviedo, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-11-18 | Friday | 17:30 | 52 | Sunny |
+
+**IntersectionF / Publix** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-05-04 | Wednesday | 17:30 | — | Scattered clouds |
+
+**RoundaboutA / TampaRoundabout** (Tampa, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-11-29 | Tuesday | AM | 115 | Sunny |
+
+**RoundaboutB / WaterForLake** (Orlando, FL, USA):
+
+| Date | WeekDay | startTime | Duration (min) | localWeather |
+|------|---------|-----------|----------------|-------------|
+| 2022-11-18 | Friday | 17:30 | 60 | Sunny |
+
+**Other scenes** (DDI, I-4 Express Lane Exit, ExpresswayB, FreewayD):
+
+| Scene | Date | localWeather | Note |
+|-------|------|-------------|------|
+| DDI | — | — | No date/time in filename |
+| I-4 Express Lane Exit | — | — | No date in filename |
+| ExpresswayB | — | — | No recordings in data processing spreadsheet |
+| FreewayD | — | — | No recordings in data processing spreadsheet |
 
 The coordinate relationship between the provided trajectory position and the base map is shown in the figure.
 
@@ -52,7 +136,7 @@ The coordinate relationship between the provided trajectory position and the bas
 
 | Variable | Value |
 |----------|-------|
-| pix2meter | 17.912853 pixel = 1 meter |
+| pix2meter | ExpresswayA: 17.912853 pixel = 1 meter; other scenes: — |
 | imgLon\*1, imgLat\*1 | (no GPS coordinates provided) |
 | imgLon\*2, imgLat\*2 | — |
 | imgLon\*3, imgLat\*3 | — |
@@ -84,70 +168,21 @@ The coordinate relationship between the provided trajectory position and the bas
 | map | XX_highway.png (one per recording) |
 | laneRange | upperLaneMarkings / lowerLaneMarkings (see recordingMeta) |
 
-**Recording Details** (60 recordings):
+**Recording Details** (60 recordings across 11 days):
 
-| recordingId | month | weekDay | startTime |
-|------------|-------|---------|-----------|
-| 1 | 9.2017 | Tue | 08:38 |
-| 2 | 9.2017 | Tue | 09:04 |
-| 3 | 9.2017 | Tue | 09:54 |
-| 4 | 9.2017 | Thu | 11:16 |
-| 5 | 9.2017 | Thu | 11:41 |
-| 6 | 9.2017 | Thu | 12:06 |
-| 7 | 9.2017 | Fri | 08:21 |
-| 8 | 9.2017 | Fri | 08:37 |
-| 9 | 9.2017 | Fri | 09:24 |
-| 10 | 9.2017 | Fri | 10:36 |
-| 11 | 9.2017 | Thu | 16:18 |
-| 12 | 9.2017 | Thu | 17:21 |
-| 13 | 9.2017 | Thu | 18:04 |
-| 14 | 9.2017 | Thu | 18:28 |
-| 15 | 9.2017 | Fri | 08:49 |
-| 16 | 9.2017 | Fri | 09:11 |
-| 17 | 9.2017 | Fri | 09:35 |
-| 18 | 9.2017 | Fri | 10:07 |
-| 19 | 9.2017 | Fri | 10:24 |
-| 20 | 9.2017 | Fri | 10:47 |
-| 21 | 9.2017 | Fri | 11:10 |
-| 22 | 9.2017 | Fri | 11:44 |
-| 23 | 9.2017 | Fri | 12:06 |
-| 24 | 9.2017 | Fri | 12:27 |
-| 25 | 10.2017 | Mon | 08:55 |
-| 26 | 10.2017 | Mon | 09:20 |
-| 27 | 10.2017 | Mon | 09:46 |
-| 28 | 10.2017 | Mon | 10:12 |
-| 29 | 10.2017 | Mon | 10:39 |
-| 30 | 10.2017 | Mon | 11:03 |
-| 31 | 10.2017 | Mon | 11:28 |
-| 32 | 10.2017 | Mon | 12:20 |
-| 33 | 10.2017 | Mon | 12:41 |
-| 34 | 10.2017 | Mon | 13:34 |
-| 35 | 10.2017 | Wed | 11:26 |
-| 36 | 10.2017 | Wed | 11:09 |
-| 37 | 10.2017 | Wed | 11:55 |
-| 38 | 10.2017 | Wed | 12:20 |
-| 39 | 10.2017 | Mon | 09:04 |
-| 40 | 10.2017 | Mon | 09:30 |
-| 41 | 10.2017 | Mon | 10:41 |
-| 42 | 10.2017 | Mon | 11:05 |
-| 43 | 10.2017 | Mon | 11:31 |
-| 44 | 10.2017 | Mon | 11:54 |
-| 45 | 10.2017 | Mon | 12:23 |
-| 46 | 11.2017 | Wed | 08:47 |
-| 47 | 11.2017 | Wed | 09:15 |
-| 48 | 11.2017 | Wed | 09:38 |
-| 49 | 11.2017 | Wed | 10:02 |
-| 50 | 11.2017 | Wed | 11:38 |
-| 51 | 11.2017 | Wed | 12:05 |
-| 52 | 11.2017 | Wed | 12:30 |
-| 53 | 11.2017 | Wed | 13:15 |
-| 54 | 1.2018 | Thu | 09:16 |
-| 55 | 1.2018 | Thu | 09:39 |
-| 56 | 1.2018 | Thu | 10:04 |
-| 57 | 1.2018 | Thu | 10:26 |
-| 58 | 7.2018 | Wed | 09:15 |
-| 59 | 7.2018 | Wed | 09:23 |
-| 60 | 7.2018 | Wed | 09:37 |
+| month | weekDay | startTime | duration (min) |
+|-------|---------|-----------|----------------|
+| 9.2017 | Tue | 08:38 | 49 |
+| 9.2017 | Thu | 11:16 | 57 |
+| 9.2017 | Thu | 16:18 | 62 |
+| 9.2017 | Fri | 08:21 | 56 |
+| 9.2017 | Fri | 08:49 | 143 |
+| 10.2017 | Mon | 08:55 | 182 |
+| 10.2017 | Mon | 09:04 | 131 |
+| 10.2017 | Wed | 11:26 | 76 |
+| 11.2017 | Wed | 08:47 | 144 |
+| 1.2018 | Thu | 09:16 | 69 |
+| 7.2018 | Wed | 09:15 | 30 |
 
 The coordinate relationship between the provided trajectory position and the base map is shown in the figure.
 
@@ -157,7 +192,7 @@ The coordinate relationship between the provided trajectory position and the bas
 
 | Variable | Value |
 |----------|-------|
-| pix2meter | (highD does not provide a pixel-to-meter conversion factor; raw data coordinates are already in meters) |
+| pix2meter | — |
 | imgLon\*1, imgLat\*1 | (highD does not provide GPS coordinates) |
 | imgLon\*2, imgLat\*2 | — |
 | imgLon\*3, imgLat\*3 | — |
@@ -187,43 +222,19 @@ The coordinate relationship between the provided trajectory position and the bas
 | map | XX_background.png (one per recording) |
 | laneRange | Lanelet map files available (OSM format) |
 
-**Recording Details** (33 recordings):
+**Recording Details** (33 recordings across 9 days):
 
-| recordingId | weekday | startTime | localWeather |
-|------------|---------|-----------|-------------|
-| 0 | wednesday | 16:00 | — |
-| 1 | tuesday | 15:00 | — |
-| 2 | tuesday | 15:00 | — |
-| 3 | monday | 12:00 | — |
-| 4 | monday | 12:00 | — |
-| 5 | monday | 13:00 | — |
-| 6 | monday | 14:00 | — |
-| 7 | tuesday | — | — |
-| 8 | tuesday | — | — |
-| 9 | tuesday | — | — |
-| 10 | tuesday | — | — |
-| 11 | monday | 16:00 | — |
-| 12 | monday | 16:00 | — |
-| 13 | monday | 16:00 | — |
-| 14 | monday | 17:00 | — |
-| 15 | tuesday | 15:00 | — |
-| 16 | tuesday | 15:00 | — |
-| 17 | tuesday | 16:00 | — |
-| 18 | tuesday | 16:00 | — |
-| 19 | tuesday | 16:00 | — |
-| 20 | tuesday | 16:00 | — |
-| 21 | tuesday | 17:00 | — |
-| 22 | tuesday | 17:00 | — |
-| 23 | tuesday | 18:00 | — |
-| 24 | tuesday | 18:00 | — |
-| 25 | wednesday | 16:00 | — |
-| 26 | wednesday | 16:00 | — |
-| 27 | wednesday | 17:00 | — |
-| 28 | wednesday | 17:00 | — |
-| 29 | wednesday | 17:00 | — |
-| 30 | thursday | 13:00 | — |
-| 31 | thursday | 13:00 | — |
-| 32 | thursday | 14:00 | — |
+| weekday | startTime | duration (min) | localWeather |
+|---------|-----------|----------------|-------------|
+| wednesday | 16:00 | 16 | — |
+| tuesday | 15:00 | 32 | — |
+| monday | 12:00 | 62 | — |
+| tuesday | — | 63 | — |
+| monday | 16:00 | 67 | — |
+| tuesday | 15:00 | 56 | — |
+| tuesday | 16:00 | 135 | — |
+| wednesday | 16:00 | 107 | — |
+| thursday | 13:00 | 51 | — |
 
 The coordinate relationship between the provided trajectory position and the base map is shown in the figure.
 
@@ -265,34 +276,15 @@ The coordinate relationship between the provided trajectory position and the bas
 | map | XX_background.png (one per recording) |
 | laneRange | — |
 
-**Recording Details** (24 recordings):
+**Recording Details** (24 recordings across 5 days):
 
-| recordingId | weekday | startTime | localWeather |
-|------------|---------|-----------|-------------|
-| 0 | tuesday | 07:00 | — |
-| 1 | wednesday | 11:00 | — |
-| 2 | thursday | 09:00 | — |
-| 3 | thursday | 09:00 | — |
-| 4 | thursday | 09:00 | — |
-| 5 | thursday | 10:00 | — |
-| 6 | thursday | 10:00 | — |
-| 7 | thursday | 10:00 | — |
-| 8 | thursday | 11:00 | — |
-| 9 | tuesday | 09:00 | — |
-| 10 | tuesday | 09:00 | — |
-| 11 | tuesday | 10:00 | — |
-| 12 | tuesday | 11:00 | — |
-| 13 | tuesday | 11:00 | — |
-| 14 | tuesday | 11:00 | — |
-| 15 | tuesday | 12:00 | — |
-| 16 | tuesday | 12:00 | — |
-| 17 | tuesday | 15:00 | — |
-| 18 | tuesday | 15:00 | — |
-| 19 | tuesday | 16:00 | — |
-| 20 | wednesday | 09:00 | — |
-| 21 | wednesday | 09:00 | — |
-| 22 | wednesday | 10:00 | — |
-| 23 | wednesday | 10:00 | — |
+| weekday | startTime | duration (min) | localWeather |
+|---------|-----------|----------------|-------------|
+| tuesday | 07:00 | 17 | — |
+| wednesday | 11:00 | 18 | — |
+| thursday | 09:00 | 123 | — |
+| tuesday | 09:00 | 166 | — |
+| wednesday | 09:00 | 73 | — |
 
 The coordinate relationship between the provided trajectory position and the base map is shown in the figure.
 
@@ -351,7 +343,7 @@ The coordinate relationship between the provided trajectory position and the bas
 
 | Variable | Value |
 |----------|-------|
-| pix2meter | 1.0 (placeholder; NGSIM coordinates are converted to metric local coordinate system, pixel coords = metric coords) |
+| pix2meter | — |
 | imgLon\*1, imgLat\*1 | (NGSIM raw data uses Global_X/Y in feet, no map corner GPS coordinates) |
 | imgLon\*2, imgLat\*2 | — |
 | imgLon\*3, imgLat\*3 | — |
