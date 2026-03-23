@@ -1,11 +1,7 @@
-import os
-import math
 import pandas as pd
 import numpy as np
 from collections import defaultdict
 import bisect
-
-from box_distance import calculate_nearest_points, order_rect_points
 from ssm_core import SSMCalculator
 
 def load_metadata(meta_file):
