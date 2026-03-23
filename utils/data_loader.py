@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 import bisect
-from ssm_core import SSMCalculator
+from ssm import SSMCalculator
 
 def load_metadata(meta_file):
     df = pd.read_csv(meta_file)
