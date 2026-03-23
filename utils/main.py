@@ -1,10 +1,24 @@
 import os
 import numpy as np
-from ssm_core import SSMCalculator, compute_cpi_from_drac_history, compute_tet_tit_from_history
+from ssm import (
+    SSMCalculator,
+    compute_cpi_from_drac_history,
+    compute_tet_tit_from_history)
 from data_loader import SafetyAnalyzer
 from box_distance import calculate_nearest_points
 from output_json import OutputWriter
 import visualizer
+
+
+# ===== 用户自定义参数 =====
+EGO_ID = 19               # 指定主车ID，None表示遍历所有车
+TARGET_IDS = []             # 指定目标ID列表，为空则使用周围车辆
+START_FRAME = None          # 起始帧，None表示第一帧
+END_FRAME = None            # 结束帧，None表示最后一帧
+ENABLE_VISUAL = True        # 是否保存触发事件的图像
+ENABLE_OUTPUT = True          # 是否保存JSON结果
+OUTPUT_DIR = "./output"       # 输出目录
+# =========================
 
 # ===== 车辆类型对应的最大可用减速度（用于 CPI）=====
 MADR_CAR = 3
@@ -24,11 +38,15 @@ VEHICLE_CLASS_MADR = {
     -1: MADR_UNKNOWN
 }
 
-# ===== 危险阈值（用户可调整）=====
-TTC_THRESHOLD = 2.0
-MTTC_THRESHOLD = 2.0
-PET_THRESHOLD = 2.0
-TTC2D_THRESHOLD = 2.0
+# ===== 危险阈值（用于危险场景可视化）=====
+TTC_THRESHOLD = 10.0
+MTTC_THRESHOLD = 10.0
+PET_THRESHOLD = 10.0
+TTC2D_THRESHOLD = 10.0
+DRAC_THRESHOLD = 3.4
+
+# ===== 危险阈值（用于计算TIT，TET）=====
+TIT_TET_THRESHOLD = 10.0
 # ================================
 
 def format_value(val):
@@ -37,21 +55,22 @@ def format_value(val):
     else:
         return f"{val:.4f}"
 
+def ssm_dict_for_json(ssm):
+    """将 compute_ssm_for_pair 结果转为可 JSON 序列化的 dict（含 conflict_type 字符串）。"""
+    out = {}
+    for k, v in ssm.items():
+        if k == "conflict_type":
+            out[k] = v
+        else:
+            out[k] = float(v) if not np.isinf(v) else None
+    return out
+
 def main():
     meta_file = r"E:\xizihao\Internship\zhiling\work\NBDT\02_recordingMeta.csv"
     tracks_file = r"E:\xizihao\Internship\zhiling\work\NBDT\KZM6.csv"
 
     analyzer = SafetyAnalyzer(meta_file, tracks_file)
 
-    # ===== 用户自定义参数 =====
-    EGO_ID = None               # 指定主车ID，None表示遍历所有车
-    TARGET_IDS = []             # 指定目标ID列表，为空则使用周围车辆
-    START_FRAME = None          # 起始帧，None表示第一帧
-    END_FRAME = None            # 结束帧，None表示最后一帧
-    ENABLE_VISUAL = True        # 是否保存触发事件的图像
-    ENABLE_OUTPUT = True          # 是否保存JSON结果
-    OUTPUT_DIR = "./output"       # 输出目录
-    # =========================
 
     frames = analyzer.get_frame_range()
     start = START_FRAME if START_FRAME is not None else frames[0]
@@ -71,6 +90,7 @@ def main():
             "thresholds": {
                 "TTC": TTC_THRESHOLD,
                 "MTTC": MTTC_THRESHOLD,
+                "DRAC": DRAC_THRESHOLD,
                 "PET": PET_THRESHOLD,
                 "2D_TTC": TTC2D_THRESHOLD}})
 
@@ -115,14 +135,14 @@ def main():
                         frames_ssm = []
                         for f_data in scene['frames_data']:
                             f_frame, _, _, f_ssm, f_rel = f_data
-                            ssm_clean = {k: (float(v) if not np.isinf(v) else None) for k, v in f_ssm.items()}
+                            ssm_clean = ssm_dict_for_json(f_ssm)
                             frames_ssm.append({
                                 "frame": int(f_frame),
                                 "relation": f_rel,
                                 **ssm_clean
                             })
                         if scene['ttc_history']:
-                            tet, tit = compute_tet_tit_from_history(scene['ttc_history'], analyzer.dt, TTC_THRESHOLD)
+                            tet, tit = compute_tet_tit_from_history(scene['ttc_history'], analyzer.dt, TIT_TET_THRESHOLD)
                         else:
                             tet, tit = None, None
                         first_rel = scene['frames_data'][0][4] if scene['frames_data'] else 'unknown'
@@ -162,21 +182,22 @@ def main():
                 print(f"Frame {frame}: ego {ego_id} -> target {target_id} (relation: {relation})")
                 for key in ['TTC', 'MTTC', 'DRAC', 'CAI', 'PET', '2D_TTC']:
                     print(f"  {key}: {format_value(ssm[key])}")
+                print(f"  conflict_type: {ssm.get('conflict_type')}")
 
                 # 收集DRAC用于CPI（仅当前方跟驰时）
                 if not np.isinf(ssm['DRAC']) and ('front' in relation):
                     drac_history_ego.append((frame, ssm['DRAC'], ego_info['class']))
 
                 # 判断当前帧是否触发危险（用于可视化标记）
-                trigger = False
-                if not np.isinf(ssm['TTC']) and ssm['TTC'] < TTC_THRESHOLD:
-                    trigger = True
-                if not np.isinf(ssm['MTTC']) and ssm['MTTC'] < MTTC_THRESHOLD:
-                    trigger = True
-                if not np.isinf(ssm['PET']) and ssm['PET'] < PET_THRESHOLD:
-                    trigger = True
-                if not np.isinf(ssm['2D_TTC']) and ssm['2D_TTC'] < TTC2D_THRESHOLD:
-                    trigger = True
+                # trigger = False
+                # if not np.isinf(ssm['TTC']) and ssm['TTC'] < TTC_THRESHOLD:
+                #     trigger = True
+                # if not np.isinf(ssm['MTTC']) and ssm['MTTC'] < MTTC_THRESHOLD:
+                #     trigger = True
+                # if not np.isinf(ssm['PET']) and ssm['PET'] < PET_THRESHOLD:
+                #     trigger = True
+                # if not np.isinf(ssm['2D_TTC']) and ssm['2D_TTC'] < TTC2D_THRESHOLD:
+                #     trigger = True
 
                 current_targets.add(target_id)
 
@@ -184,7 +205,7 @@ def main():
                 if target_id not in target_scenes:
                     target_scenes[target_id] = {
                         'frames_data': [],
-                        'has_trigger': False,
+                        'has_trigger': True, # 如果需要从危险情况发生开始进行可视化，则改为False，并将188-196，214-215行注释取消
                         'ttc_history': []
                     }
 
@@ -194,8 +215,8 @@ def main():
                 target_scenes[target_id]['frames_data'].append((frame, v1, v2, ssm, relation))
                 if not np.isinf(ssm['TTC']):
                     target_scenes[target_id]['ttc_history'].append(ssm['TTC'])
-                if trigger:
-                    target_scenes[target_id]['has_trigger'] = True
+                # if trigger:
+                #     target_scenes[target_id]['has_trigger'] = True
 
             # 检查哪些目标车在当前帧消失了，结束它们的场景
             finished_targets = [tid for tid in target_scenes if tid not in current_targets]
@@ -217,13 +238,13 @@ def main():
                     frames_ssm = []
                     for f_data in scene['frames_data']:
                         f_frame, _, _, f_ssm, f_rel = f_data
-                        ssm_clean = {k: (float(v) if not np.isinf(v) else None) for k, v in f_ssm.items()}
+                        ssm_clean = ssm_dict_for_json(f_ssm)
                         frames_ssm.append({
                             "frame": int(f_frame),
                             "relation": f_rel,
                             **ssm_clean})
                     if scene['ttc_history']:
-                        tet, tit = compute_tet_tit_from_history(scene['ttc_history'], analyzer.dt, TTC_THRESHOLD)
+                        tet, tit = compute_tet_tit_from_history(scene['ttc_history'], analyzer.dt, TIT_TET_THRESHOLD)
                     else:
                         tet, tit = None, None
                     first_rel = scene['frames_data'][0][4] if scene['frames_data'] else 'unknown'
@@ -249,13 +270,13 @@ def main():
                 frames_ssm = []
                 for f_data in scene['frames_data']:
                     f_frame, _, _, f_ssm, f_rel = f_data
-                    ssm_clean = {k: (float(v) if not np.isinf(v) else None) for k, v in f_ssm.items()}
+                    ssm_clean = ssm_dict_for_json(f_ssm)
                     frames_ssm.append({
                         "frame": int(f_frame),
                         "relation": f_rel,
                         **ssm_clean})
                 if scene['ttc_history']:
-                    tet, tit = compute_tet_tit_from_history(scene['ttc_history'], analyzer.dt, TTC_THRESHOLD)
+                    tet, tit = compute_tet_tit_from_history(scene['ttc_history'], analyzer.dt, TIT_TET_THRESHOLD)
                 else:
                     tet, tit = None, None
                 first_rel = scene['frames_data'][0][4] if scene['frames_data'] else 'unknown'
