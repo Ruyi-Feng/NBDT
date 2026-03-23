@@ -1,7 +1,6 @@
 import os
 import json
 import numpy as np
-from collections import defaultdict
 
 
 class OutputWriter:
@@ -41,7 +40,7 @@ class OutputWriter:
             relation: 相对位置关系（如 'front', 'left_front' 等，取起始帧的关系）
             start_frame: 起始帧
             end_frame: 终止帧
-            frames_ssm: 列表，每个元素为字典，包含 'frame' 和所有SSM指标（值已转换为float或None）
+            frames_ssm: 列表，每个元素为字典，包含 'frame'、SSM 数值指标及可选字符串字段 conflict_type
             tit: 该交互的 TIT 值
             tet: 该交互的 TET 值
         """
