@@ -166,10 +166,9 @@ When `ENABLE_OUTPUT = True`, a JSON file named `{tracks_filename}_results.json` 
     "ego_id": {
       "targets": {
         "target_id": {
-          "relation": "front",  // relative position at start
           "start_frame": 100,
           "end_frame": 150,
-          "frames": [           // per‑frame data
+          "instant_metrics": [           // per‑frame data
             {
               "frame": 101,
               "relation": "front",
@@ -178,17 +177,18 @@ When `ENABLE_OUTPUT = True`, a JSON file named `{tracks_filename}_results.json` 
               "DRAC": 1.2,
               "CAI": 15.7,
               "PET": null,
-              "2D_TTC": null
+              "2D_TTC": null,
+              "conflict_type": "rear_end",
             },
             ...
           ],
-          "aggregated": {
+          "period_metrics": {
             "TIT": 0.234,       // Time‑Integrated TTC
             "TET": 0.056        // Time‑Exposed TTC
+            "cpi": 0.018              // Crash Potential Index
           }
         }
       },
-      "cpi": 0.018              // Crash Potential Index
     }
   }
 }
