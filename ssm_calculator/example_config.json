@@ -1,0 +1,30 @@
+{
+  "tracks_file": "path/to/your_tracks.csv",
+  "mode": "batch",
+  "start_frame": null,
+  "end_frame": null,
+  "lane": {
+    "left_lane_offset": -1,
+    "right_lane_offset": 1,
+    "lane_direction_similarity_deg": 45.0
+  },
+  "period_metric": {
+    "tet_tit_threshold": 10.0,
+    "vehicle_class_madr": {
+      "0": 3.0,
+      "1": 3.0,
+      "2": 2.0,
+      "3": 2.0,
+      "4": 4.0,
+      "5": 10.0,
+      "-1": 3.0
+    }
+  },
+  "pair": {
+    "ego_id": 19,
+    "target_id": 23
+  },
+  "batch": {
+    "relations": ["left_front", "front", "right_front"]
+  }
+}
