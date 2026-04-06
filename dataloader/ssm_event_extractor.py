@@ -55,7 +55,7 @@ def find_risk_events(data, metric, threshold, condition):
     for ego_id, ego_data in vehicles.items():
         targets = ego_data.get("targets", {})
         for target_id, target_data in targets.items():
-            frames = target_data.get("frames", [])
+            frames = target_data.get("instant_metrics", [])
             in_event = False
             event_start = None
             event_end = None
