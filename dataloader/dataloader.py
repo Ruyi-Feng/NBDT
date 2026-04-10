@@ -343,8 +343,8 @@ class CitySimTransfer(BasicTransfer):
             'boundingBox4Xm': bb4Xm,
             'boundingBox4Ym': bb4Ym,
             # Motion attributes
-            'heading': raw['heading'],
-            'course': raw['course'],
+            'heading': raw['course'],
+            'course': raw['heading'],
             'speed': raw['speed'],
             'objClass': -1,
             'carCenterLon': -1,
