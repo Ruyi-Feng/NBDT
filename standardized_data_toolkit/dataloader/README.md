@@ -58,13 +58,3 @@ dataset: highD
 data_folder: ./original_data
 save_folder: ./processed_data
 ```
-
-# SSM Documentation Moved
-
-The Surrogate Safety Measures (SSM) module has been refactored and moved out of `dataloader`.
-
-Please refer to:
-
-- `ssm_calculator/README.md` for complete usage, configuration, and output format.
-
-
