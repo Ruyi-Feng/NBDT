@@ -16,6 +16,17 @@ The standardized format can be generated from existing datasets using:
 
 Use `dataloader` to transform heterogeneous source datasets into the project’s standard trajectory CSV format before running downstream analysis tools.
 
+## Dataset Metadata and References
+
+To understand dataset-specific field mappings, coordinate systems, and normalization notes, use:
+
+- `dataset_metadata.md`: consolidated metadata documentation
+- Detailed reference: [`dataset_metadata.md`](./dataset_metadata.md)
+
+Reference figures for coordinate systems and related illustrations are stored in:
+
+- `images/`: supporting diagrams used by metadata and conversion docs
+
 ## Current Processing Tools
 
 At this stage, downstream processing currently includes:
@@ -25,4 +36,20 @@ At this stage, downstream processing currently includes:
 
 This includes the main SSM calculation flow and related analysis utilities built on top of standardized data.
 
+## Shared Utilities
+
+Reusable helper scripts are grouped in:
+
+- `utils/`: shared utility code for loading data, SSM-related helpers, JSON output, and visualization support
+
+Current utility scripts include:
+
+- `box_distance.py`
+- `data_loader.py`
+- `main.py`
+- `output_json.py`
+- `ssm.py`
+- `visualizer.py`
+
+These utilities support quick experiments and common reusable logic across the toolkit.
 
