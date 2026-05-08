@@ -58,8 +58,3 @@ dataset: highD
 data_folder: ./original_data
 save_folder: ./processed_data
 ```
-
-## Surrogate Safety Measures Calculation
-
-
-

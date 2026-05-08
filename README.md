@@ -1,6 +1,6 @@
-# Ozone: construction of transportation research ontology system
+# Ozone: A Unified Platform for Transportation Research
 
-Modern Intelligent Transportation Systems rely on multiple sensing sources—such as roadside cameras, vehicle sensors, UAV imagery, radar, and LiDAR—which produce diverse data including traffic logs, road infrastructure attributes, vehicle trajectories, and human behavioral signals. However, these datasets often differ in formats, coordinate systems, timestamps, and semantic definitions, making integration and reuse difficult. Ozone addresses this challenge by constructing a standardized ontology that connects transportation entities, data structures, and relationships. This ontology supports consistent data integration, improves interoperability between datasets and simulation platforms, and reduces the engineering burden for researchers when building digital twins or conducting transportation experiments.
+Intelligent Transportation Systems increasingly depend on heterogeneous data from roadside cameras, UAV imagery, LiDAR, and in-vehicle sensors, yet the lack of unified data standards, model interfaces, and evaluation protocols across these sources hampers reproducibility, cross-dataset benchmarking, and cross-region transferability of research findings. Existing trajectory datasets follow incompatible conventions for coordinate systems, object representations, and metadata fields, forcing researchers to build custom preprocessing pipelines for each dataset and simulator combination. To address these challenges, we propose Ozone, a unified platform for transportation research organized around five interconnected layers---Hardware, Data, Model, Evaluation, and Prototype---each with standardized schemas, automated conversion pipelines, and interoperable interfaces. 
 
 
 ## Standard Interface
@@ -141,7 +141,7 @@ A large-scale traffic sensing platform deployed on a 4-mile section of I-24 in T
 
 |                       Location Name                       |                                     Real World Map                                     | Digital Twin Map |
 |:---------------------------------------------------------:|:--------------------------------------------------------------------------------------:|:----------------:|
-| [ Nashville<br />](https://zen-traffic-data.net/english/) | <img src="main/I-24-MOTION/Nashville/1.png" width="450" height="300" alt="Nashville"/> |      ![]()       |
+| [ Nashville<br />](https://i24motion.org/) | <img src="main/I-24-MOTION/Nashville/1.png" width="450" height="300" alt="Nashville"/> |      ![]()       |
 
 ## 100-Car Naturalistic Driving Study (NDS)
 A landmark naturalistic driving study conducted by VTTI, NHTSA, and VDOT. It collected multi-channel in-vehicle video and vehicle dynamics sensor data, and compiled an “event database” (crash/near-crash/baseline). It remains a key resource for analyzing naturalistic driving behavior.

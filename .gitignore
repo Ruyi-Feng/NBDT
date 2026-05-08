@@ -16,4 +16,5 @@ test.py
 original_data/
 processed_data/
 verify_output/
+test_output/
 *.zip
