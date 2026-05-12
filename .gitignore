@@ -18,3 +18,6 @@ processed_data/
 verify_output/
 test_output/
 *.zip
+
+# Local user configs (keep example_config.json tracked)
+standardized_data_toolkit/ssm_calculator/citysim_config.json
