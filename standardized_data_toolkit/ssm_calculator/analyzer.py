@@ -58,6 +58,9 @@ class TrackDataStore:
         self.frame_vehicles: Dict[int, Dict[int, VehicleState]] = {}
         self.frame_lane_vehicles: Dict[int, Dict[int, List[int]]] = {}
         self.frame_lane_direction: Dict[int, Dict[int, float]] = {}
+        # frame -> lane_id -> {car_id: index in lane_list} for O(1) lookup in
+        # ``BaseSSMAnalyzer.get_surrounding_vehicles``.
+        self.frame_lane_index: Dict[int, Dict[int, Dict[int, int]]] = {}
 
         self._preprocess()
 
@@ -159,54 +162,171 @@ class TrackDataStore:
         delta = np.radians(df.loc[mask, "heading"]) - df.loc[mask, "lane_dir_rad"]
         df.loc[mask, "proj_acc"] = df.loc[mask, "a"] * np.cos(delta)
 
-        for frame, group in df.groupby("frameNum"):
-            frame_int = int(frame)
-            veh_dict: Dict[int, VehicleState] = {}
-            lane_dict: Dict[int, List[int]] = defaultdict(list)
-            lane_dir_dict: Dict[int, float] = {}
+        self._build_frame_structures(df)
 
-            for lane, lane_group in group.groupby("laneId"):
-                lane_int = int(lane) if not pd.isna(lane) else -1
-                if lane_group["proj_dist"].notna().any():
-                    lane_group_sorted = lane_group.sort_values("proj_dist")
-                    lane_dict[lane_int] = lane_group_sorted["carId"].astype(int).tolist()
-                else:
-                    lane_dict[lane_int] = lane_group["carId"].astype(int).tolist()
+    def _build_frame_structures(self, df: pd.DataFrame) -> None:
+        """Vectorized replacement for the original per-frame iterrows loop.
 
-                lane_dir = lane_group["lane_dir_rad"].iloc[0]
-                if not pd.isna(lane_dir):
-                    lane_dir_dict[lane_int] = float(lane_dir)
+        Builds the same ``frame_vehicles``, ``frame_lane_vehicles`` and
+        ``frame_lane_direction`` dicts plus an additional ``frame_lane_index``
+        lookup. Behavior is preserved bit-for-bit relative to the original
+        implementation.
+        """
+        # ----- vectorized ordered_bbox per row (order_rect_points) -----
+        bb = np.stack([
+            df["boundingBox1Xm"].to_numpy(dtype=float),
+            df["boundingBox1Ym"].to_numpy(dtype=float),
+            df["boundingBox2Xm"].to_numpy(dtype=float),
+            df["boundingBox2Ym"].to_numpy(dtype=float),
+            df["boundingBox3Xm"].to_numpy(dtype=float),
+            df["boundingBox3Ym"].to_numpy(dtype=float),
+            df["boundingBox4Xm"].to_numpy(dtype=float),
+            df["boundingBox4Ym"].to_numpy(dtype=float),
+        ], axis=1).reshape(-1, 4, 2)
+        centroid = bb.mean(axis=1, keepdims=True)
+        deltas = bb - centroid
+        angles = np.arctan2(deltas[..., 1], deltas[..., 0])
+        order = np.argsort(angles, axis=1, kind="stable")
+        ordered = np.take_along_axis(bb, order[..., None], axis=1)
+        a = ordered[:, 0]
+        b = ordered[:, 1]
+        c = ordered[:, 2]
+        cross = (b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1]) - (b[:, 1] - a[:, 1]) * (c[:, 0] - a[:, 0])
+        flip = cross > 0
+        if flip.any():
+            ordered[flip] = ordered[flip][:, [0, 3, 2, 1], :]
 
-            for _, row in group.iterrows():
-                car_id = int(row["carId"])
-                state = VehicleState(
-                    x=float(row["x"]),
-                    y=float(row["y"]),
-                    vx=float(row["vx"]),
-                    vy=float(row["vy"]),
-                    speed=float(row["speed"]),
-                    heading=float(row["heading"]),
-                    acceleration=float(row["a"]),
-                    angle_speed=float(row["angle_speed"]),
-                    length=float(row["L"]),
-                    width=float(row["W"]),
-                    lane_id=int(row["laneId"]) if not pd.isna(row["laneId"]) else -1,
-                    obj_class=int(row["objClass"]) if not pd.isna(row["objClass"]) else -1,
-                    bbox=[
-                        (float(row["boundingBox1Xm"]), float(row["boundingBox1Ym"])),
-                        (float(row["boundingBox2Xm"]), float(row["boundingBox2Ym"])),
-                        (float(row["boundingBox3Xm"]), float(row["boundingBox3Ym"])),
-                        (float(row["boundingBox4Xm"]), float(row["boundingBox4Ym"])),
-                    ],
-                    proj_dist=float(row["proj_dist"]) if "proj_dist" in row and not pd.isna(row["proj_dist"]) else None,
-                    proj_speed=float(row["proj_speed"]) if "proj_speed" in row and not pd.isna(row["proj_speed"]) else None,
-                    proj_acc=float(row["proj_acc"]) if "proj_acc" in row and not pd.isna(row["proj_acc"]) else None,
-                )
-                veh_dict[car_id] = state
+        # Sort once globally: (frameNum, laneId, proj_dist). Within ties the sort
+        # is stable, so it preserves the original (carId, frameNum) order — which
+        # matches what the legacy code produced for lanes without any proj_dist.
+        df = df.copy()
+        df["__row__"] = np.arange(len(df), dtype=np.int64)
+        df.sort_values(["frameNum", "laneId", "proj_dist"], inplace=True,
+                       kind="stable", na_position="last")
+        row_idx = df["__row__"].to_numpy()
 
-            self.frame_vehicles[frame_int] = veh_dict
-            self.frame_lane_vehicles[frame_int] = lane_dict
-            self.frame_lane_direction[frame_int] = lane_dir_dict
+        ordered_sorted = ordered[row_idx]
+
+        # Pre-pull numpy arrays so .item() lookups inside the loop are cheap.
+        col_frame = df["frameNum"].to_numpy(dtype=np.int64)
+        col_lane_raw = df["laneId"].to_numpy()
+        col_lane_is_na = pd.isna(col_lane_raw)
+        col_lane = np.where(col_lane_is_na, -1, col_lane_raw).astype(np.int64)
+        col_carid = df["carId"].to_numpy(dtype=np.int64)
+        col_x = df["x"].to_numpy(dtype=float)
+        col_y = df["y"].to_numpy(dtype=float)
+        col_vx = df["vx"].to_numpy(dtype=float)
+        col_vy = df["vy"].to_numpy(dtype=float)
+        col_speed = df["speed"].to_numpy(dtype=float)
+        col_heading = df["heading"].to_numpy(dtype=float)
+        col_a = df["a"].to_numpy(dtype=float)
+        col_angle_speed = df["angle_speed"].to_numpy(dtype=float)
+        col_L = df["L"].to_numpy(dtype=float)
+        col_W = df["W"].to_numpy(dtype=float)
+        col_obj_raw = df["objClass"].to_numpy() if "objClass" in df.columns else np.full(len(df), -1.0)
+        col_obj_is_na = pd.isna(col_obj_raw)
+        col_obj = np.where(col_obj_is_na, -1, col_obj_raw).astype(np.int64)
+        col_bb1x = df["boundingBox1Xm"].to_numpy(dtype=float)
+        col_bb1y = df["boundingBox1Ym"].to_numpy(dtype=float)
+        col_bb2x = df["boundingBox2Xm"].to_numpy(dtype=float)
+        col_bb2y = df["boundingBox2Ym"].to_numpy(dtype=float)
+        col_bb3x = df["boundingBox3Xm"].to_numpy(dtype=float)
+        col_bb3y = df["boundingBox3Ym"].to_numpy(dtype=float)
+        col_bb4x = df["boundingBox4Xm"].to_numpy(dtype=float)
+        col_bb4y = df["boundingBox4Ym"].to_numpy(dtype=float)
+        col_pd = df["proj_dist"].to_numpy(dtype=float) if "proj_dist" in df.columns else np.full(len(df), np.nan)
+        col_ps = df["proj_speed"].to_numpy(dtype=float) if "proj_speed" in df.columns else np.full(len(df), np.nan)
+        col_pa = df["proj_acc"].to_numpy(dtype=float) if "proj_acc" in df.columns else np.full(len(df), np.nan)
+        col_ldir = df["lane_dir_rad"].to_numpy(dtype=float)
+
+        pd_isnan = np.isnan(col_pd)
+        ps_isnan = np.isnan(col_ps)
+        pa_isnan = np.isnan(col_pa)
+        ldir_isnan = np.isnan(col_ldir)
+
+        n = len(df)
+        # Iterate once over rows in (frame, lane, proj_dist) order.
+        # The per-(frame, lane) lane_list is the sequence of car_ids in that order.
+        prev_frame = -(1 << 62)
+        prev_lane = None
+        veh_dict: Dict[int, VehicleState] = {}
+        lane_dict: Dict[int, List[int]] = {}
+        lane_dir_dict: Dict[int, float] = {}
+        lane_index_dict: Dict[int, Dict[int, int]] = {}
+        cur_lane_list: Optional[List[int]] = None
+        cur_lane_index: Optional[Dict[int, int]] = None
+
+        for i in range(n):
+            fr = int(col_frame[i])
+            ln = int(col_lane[i])
+
+            if fr != prev_frame:
+                if prev_frame != -(1 << 62):
+                    self.frame_vehicles[prev_frame] = veh_dict
+                    self.frame_lane_vehicles[prev_frame] = lane_dict
+                    self.frame_lane_direction[prev_frame] = lane_dir_dict
+                    self.frame_lane_index[prev_frame] = lane_index_dict
+                prev_frame = fr
+                prev_lane = None
+                veh_dict = {}
+                lane_dict = {}
+                lane_dir_dict = {}
+                lane_index_dict = {}
+                cur_lane_list = None
+                cur_lane_index = None
+
+            if ln != prev_lane:
+                prev_lane = ln
+                cur_lane_list = []
+                cur_lane_index = {}
+                lane_dict[ln] = cur_lane_list
+                lane_index_dict[ln] = cur_lane_index
+                if not ldir_isnan[i]:
+                    lane_dir_dict[ln] = float(col_ldir[i])
+
+            cid = int(col_carid[i])
+            cur_lane_index[cid] = len(cur_lane_list)
+            cur_lane_list.append(cid)
+
+            ordered_list = [
+                (float(ordered_sorted[i, 0, 0]), float(ordered_sorted[i, 0, 1])),
+                (float(ordered_sorted[i, 1, 0]), float(ordered_sorted[i, 1, 1])),
+                (float(ordered_sorted[i, 2, 0]), float(ordered_sorted[i, 2, 1])),
+                (float(ordered_sorted[i, 3, 0]), float(ordered_sorted[i, 3, 1])),
+            ]
+
+            state = VehicleState(
+                x=float(col_x[i]),
+                y=float(col_y[i]),
+                vx=float(col_vx[i]),
+                vy=float(col_vy[i]),
+                speed=float(col_speed[i]),
+                heading=float(col_heading[i]),
+                acceleration=float(col_a[i]),
+                angle_speed=float(col_angle_speed[i]),
+                length=float(col_L[i]),
+                width=float(col_W[i]),
+                lane_id=ln,
+                obj_class=int(col_obj[i]),
+                bbox=[
+                    (float(col_bb1x[i]), float(col_bb1y[i])),
+                    (float(col_bb2x[i]), float(col_bb2y[i])),
+                    (float(col_bb3x[i]), float(col_bb3y[i])),
+                    (float(col_bb4x[i]), float(col_bb4y[i])),
+                ],
+                proj_dist=None if pd_isnan[i] else float(col_pd[i]),
+                proj_speed=None if ps_isnan[i] else float(col_ps[i]),
+                proj_acc=None if pa_isnan[i] else float(col_pa[i]),
+                ordered_bbox=ordered_list,
+            )
+            veh_dict[cid] = state
+
+        # flush last frame
+        if prev_frame != -(1 << 62):
+            self.frame_vehicles[prev_frame] = veh_dict
+            self.frame_lane_vehicles[prev_frame] = lane_dict
+            self.frame_lane_direction[prev_frame] = lane_dir_dict
+            self.frame_lane_index[prev_frame] = lane_index_dict
 
     def get_vehicle(self, frame: int, car_id: int) -> Optional[VehicleState]:
         return self.frame_vehicles.get(frame, {}).get(car_id)
@@ -242,10 +362,15 @@ class BaseSSMAnalyzer:
         if ego_lane not in lane_map:
             return []
         lane_list = lane_map[ego_lane]
-        try:
-            idx = lane_list.index(ego_id)
-        except ValueError:
-            return []
+        # O(1) index lookup via precomputed map (was list.index() before).
+        ego_lane_index = self.data.frame_lane_index.get(frame, {}).get(ego_lane)
+        if ego_lane_index is not None and ego_id in ego_lane_index:
+            idx = ego_lane_index[ego_id]
+        else:
+            try:
+                idx = lane_list.index(ego_id)
+            except ValueError:
+                return []
 
         surrounding: List[Tuple[int, str]] = []
         if idx < len(lane_list) - 1:
