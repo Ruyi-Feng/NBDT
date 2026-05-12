@@ -304,6 +304,7 @@ class CitySimTransfer(BasicTransfer):
         raw = pd.read_csv(file_path)
 
         FEET2METER = 0.3048
+        MPH2MS = 0.44704  # mile/hour -> m/s
 
         # Meter coordinates (convert from feet)
         carCenterXm = raw['carCenterXft'] * FEET2METER
@@ -345,7 +346,7 @@ class CitySimTransfer(BasicTransfer):
             # Motion attributes
             'heading': raw['course'],
             'course': raw['heading'],
-            'speed': raw['speed'],
+            'speed': raw['speed'] * MPH2MS,
             'objClass': -1,
             'carCenterLon': -1,
             'carCenterLat': -1,
