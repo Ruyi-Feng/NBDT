@@ -12,6 +12,7 @@ This module converts raw trajectory datasets into the NBDT standard format.
 - `inD`
 - `NGSIM`
 - `CitySim`
+- `Waymo`
 
 Set up your Python environment first.
 
@@ -37,7 +38,7 @@ python factory.py --dataset highD --data_folder ./original_data --save_folder ./
 ```
 
 - `--dataset` (`str`, default: `highD`)
-  - Dataset key (case-insensitive): `highD`, `inD`, `ngsim`, `citysim`
+  - Dataset key (case-insensitive): `highD`, `inD`, `ngsim`, `citysim`, `Waymo`
 - `--data_folder` (`str`, default: `./original_data`)
   - Folder containing raw input files
 - `--save_folder` (`str`, default: `./processed_data`)
@@ -58,3 +59,21 @@ dataset: highD
 data_folder: ./original_data
 save_folder: ./processed_data
 ```
+
+
+#### Notes on `Waymo` (Waymo Motion Dataset)
+
+Waymo Motion has no per-frame `lane_id` and no closed lane polygons, so
+`laneId` is obtained by **centerline matching**: each vehicle centre is
+projected onto every `LaneCenter.polyline` and assigned the nearest lane
+within 2 m (else `-1`). Input is one or more `*.tfrecord` shards; requires
+`tensorflow` and `waymo-open-dataset`.
+
+Extra columns beyond the standard NBDT schema:
+
+- `scenarioId` — Waymo scenario id (one TFRecord shard contains many scenarios)
+- `tfFile` — source TFRecord filename
+- `velocity_x`, `velocity_y` — per-frame velocity components (m/s) from Waymo state
+- `length`, `width` — per-frame vehicle dimensions (m)
+- `obj_type` — Waymo agent type: 0=UNSET, 1=VEHICLE, 2=PEDESTRIAN, 3=CYCLIST, 4=OTHER
+- `vtype` — 1=HDV, 2=AV (ego data collector), 3=others

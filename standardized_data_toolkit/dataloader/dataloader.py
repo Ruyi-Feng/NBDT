@@ -1,4 +1,5 @@
 import os
+import math
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -1351,3 +1352,217 @@ UTETransfer._PROCESSORS = {
     "xam-n5": UTETransfer._process_xamn5,
     "xam-s9": UTETransfer._process_xams9,
 }
+
+
+class WaymoTransfer(BasicTransfer):
+    """Convert Waymo Motion Dataset (v1.3.0) TFRecord scenarios into the NBDT standard format.
+
+    Waymo Motion does not provide a per-vehicle, per-timestep ``lane_id`` and has
+    no closed lane polygons (unlike Argoverse 2). Lane association is therefore
+    obtained by centerline matching: for each (vehicle, frame) the centre point
+    is projected onto every ``LaneCenter.polyline`` segment, and the nearest
+    lane within a 2 m distance threshold is taken as ``laneId``.
+    """
+
+    # Vehicles are matched to a lane only when the perpendicular distance from
+    # the vehicle centre to the nearest LaneCenter polyline is <= sqrt(MAX_LANE_DIST2) m.
+    MAX_LANE_DIST2 = 4.0  # i.e. 2.0 m
+    # Drop polyline segments shorter than this (in m^2) to avoid divide-by-zero.
+    MIN_SEG_LEN2 = 0.1
+    # File prefix used by the public Waymo Motion v1.3.0 release.
+    TFRECORD_PREFIX = "training_20s.tfrecord-"
+
+    def __init__(self, args):
+        super().__init__(args)
+
+    def get_all_data(self) -> list:
+        """Return all Waymo Motion TFRecord files under ``data_folder``.
+
+        Accepts both the standard ``training_20s.tfrecord-*`` shards and any
+        other ``*.tfrecord*`` files, sorted alphabetically for reproducibility.
+        """
+        file_names = sorted(os.listdir(self.args.data_folder))
+        data_list = []
+        for f in file_names:
+            if f.startswith(self.TFRECORD_PREFIX) or ".tfrecord" in f:
+                data_list.append(os.path.join(self.args.data_folder, f))
+        return data_list
+
+    @staticmethod
+    def _build_lane_segments(scenario):
+        """Concatenate every LaneCenter polyline in a scenario into flat segment arrays.
+
+        Returns ``(seg_A, seg_AB, seg_denom, seg_lane_ids)`` or ``None`` when the
+        scenario has no usable lane geometry. ``seg_A`` are segment start points,
+        ``seg_AB`` are segment vectors, ``seg_denom`` is ``|AB|^2`` for fast
+        projection, and ``seg_lane_ids`` carries the source lane id for each
+        segment.
+        """
+        A_list, AB_list, lane_id_list = [], [], []
+        for mf in scenario.map_features:
+            if not mf.HasField("lane"):
+                continue
+            pts = mf.lane.polyline
+            if len(pts) < 2:
+                continue
+            poly = np.fromiter(
+                (c for p in pts for c in (p.x, p.y)),
+                dtype=np.float64,
+                count=2 * len(pts),
+            ).reshape(-1, 2)
+            A_list.append(poly[:-1])
+            AB_list.append(poly[1:] - poly[:-1])
+            lane_id_list.append(np.full(len(poly) - 1, mf.id, dtype=np.int64))
+
+        if not A_list:
+            return None
+
+        seg_A = np.concatenate(A_list)
+        seg_AB = np.concatenate(AB_list)
+        seg_denom = (seg_AB * seg_AB).sum(axis=1)
+        seg_lane_ids = np.concatenate(lane_id_list)
+
+        ok = seg_denom > WaymoTransfer.MIN_SEG_LEN2
+        if not np.any(ok):
+            return None
+
+        return seg_A[ok], seg_AB[ok], seg_denom[ok], seg_lane_ids[ok]
+
+    @staticmethod
+    def _match_lane(cx, cy, seg_arrays, max_dist2=MAX_LANE_DIST2):
+        """Vectorised nearest-lane lookup for a single point ``(cx, cy)``.
+
+        Returns the lane id of the closest LaneCenter segment whose squared
+        perpendicular distance is at most ``max_dist2``; otherwise ``-1``.
+        """
+        seg_A, seg_AB, seg_denom, seg_lane_ids = seg_arrays
+        ap_x = cx - seg_A[:, 0]
+        ap_y = cy - seg_A[:, 1]
+        t = (ap_x * seg_AB[:, 0] + ap_y * seg_AB[:, 1]) / seg_denom
+        valid_t = (t >= 0.0) & (t <= 1.0)
+        if not np.any(valid_t):
+            return -1
+        seg_A_v = seg_A[valid_t]
+        seg_AB_v = seg_AB[valid_t]
+        t_v = t[valid_t]
+        lane_ids_v = seg_lane_ids[valid_t]
+
+        proj_x = seg_A_v[:, 0] + t_v * seg_AB_v[:, 0]
+        proj_y = seg_A_v[:, 1] + t_v * seg_AB_v[:, 1]
+        dx = cx - proj_x
+        dy = cy - proj_y
+        d2 = dx * dx + dy * dy
+
+        best = int(np.argmin(d2))
+        if d2[best] <= max_dist2:
+            return int(lane_ids_v[best])
+        return -1
+
+    def _extract_track_records(self, scenario, tf_file: str) -> list:
+        """Flatten one Waymo ``Scenario`` proto into a list of per-frame records."""
+        records = []
+        egoid = scenario.tracks[scenario.sdc_track_index].id
+
+        seg_arrays = self._build_lane_segments(scenario)
+        has_lanes = seg_arrays is not None
+
+        for track in scenario.tracks:
+            obj_id = track.id
+            obj_type = track.object_type  # 1=VEHICLE, 2=PED, 3=CYCLIST, 4=OTHER
+            # vtype: 1=HDV, 2=AV (ego), 3=others (non-vehicles)
+            vtype = 3
+            if obj_type == 1:
+                vtype = 2 if obj_id == egoid else 1
+
+            for j, state in enumerate(track.states):
+                if not state.valid:
+                    continue
+                cx = state.center_x
+                cy = state.center_y
+
+                lane_id = -1
+                if obj_type == 1 and has_lanes:
+                    lane_id = self._match_lane(cx, cy, seg_arrays)
+
+                heading = state.heading
+                half_l = state.length / 2.0
+                half_w = state.width / 2.0
+                cos_h = math.cos(heading)
+                sin_h = math.sin(heading)
+
+                # Vehicle local frame: x forward, y left.
+                # BB1 front-right, BB2 rear-right, BB3 rear-left, BB4 front-left.
+                corners_local = (
+                    ( half_l, -half_w),
+                    (-half_l, -half_w),
+                    (-half_l,  half_w),
+                    ( half_l,  half_w),
+                )
+                corners_world = [
+                    (cx + lx * cos_h - ly * sin_h,
+                     cy + lx * sin_h + ly * cos_h)
+                    for lx, ly in corners_local
+                ]
+
+                records.append({
+                    "scenarioId": scenario.scenario_id,
+                    "tfFile": tf_file,
+                    "frameNum": j,
+                    "carId": obj_id,
+                    "laneId": lane_id,
+                    "carCenterXm": cx,
+                    "carCenterYm": cy,
+                    "carCenterX": -1,
+                    "carCenterY": -1,
+                    "velocity_x": state.velocity_x,
+                    "velocity_y": state.velocity_y,
+                    "speed": (state.velocity_x ** 2 + state.velocity_y ** 2) ** 0.5,
+                    "heading": math.degrees(heading) % 360.0,
+                    "course": (90.0 - math.degrees(heading)) % 360.0,
+                    "length": state.length,
+                    "width": state.width,
+                    "boundingBox1Xm": corners_world[0][0],
+                    "boundingBox1Ym": corners_world[0][1],
+                    "boundingBox2Xm": corners_world[1][0],
+                    "boundingBox2Ym": corners_world[1][1],
+                    "boundingBox3Xm": corners_world[2][0],
+                    "boundingBox3Ym": corners_world[2][1],
+                    "boundingBox4Xm": corners_world[3][0],
+                    "boundingBox4Ym": corners_world[3][1],
+                    "boundingBox1X": -1,
+                    "boundingBox1Y": -1,
+                    "boundingBox2X": -1,
+                    "boundingBox2Y": -1,
+                    "boundingBox3X": -1,
+                    "boundingBox3Y": -1,
+                    "boundingBox4X": -1,
+                    "boundingBox4Y": -1,
+                    "objClass": -1,
+                    # 0=UNSET, 1=VEHICLE, 2=PEDESTRIAN, 3=CYCLIST, 4=OTHER
+                    "obj_type": obj_type,
+                    # 1=HDV, 2=AV (ego data collector), 3=others
+                    "vtype": vtype,
+                    "carCenterLon": -1,
+                    "carCenterLat": -1,
+                })
+
+        return records
+
+    def _process_data(self, file_path: str) -> pd.DataFrame:
+        # Heavy deps are imported lazily so non-Waymo users do not need them.
+        import tensorflow as tf
+        from waymo_open_dataset.protos import scenario_pb2
+
+        tf_file = os.path.basename(file_path)
+        dataset = tf.data.TFRecordDataset(file_path, compression_type="")
+
+        all_records = []
+        for raw_record in dataset:
+            scenario = scenario_pb2.Scenario()
+            scenario.ParseFromString(raw_record.numpy())
+            recs = self._extract_track_records(scenario, tf_file)
+            if recs:
+                all_records.extend(recs)
+
+        print(f"  Waymo: {tf_file} -> {len(all_records)} records")
+        return pd.DataFrame(all_records)

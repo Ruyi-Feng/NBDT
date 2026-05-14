@@ -2,7 +2,7 @@
 import argparse
 import yaml
 
-from dataloader import HighDTransfer, InDTransfer, CitySimTransfer, NGSIMTransfer
+from dataloader import HighDTransfer, InDTransfer, CitySimTransfer, NGSIMTransfer, WaymoTransfer
 
 
 def parameters():
@@ -34,6 +34,8 @@ def get_driver(args):
         return CitySimTransfer(args)
     elif args.dataset == "NGSIM":
         return NGSIMTransfer(args)
+    elif args.dataset == "Waymo":
+        return WaymoTransfer(args)
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
