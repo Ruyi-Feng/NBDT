@@ -105,6 +105,68 @@ def find_risk_events(data, metric, threshold, condition):
     return events
 
 
+def load_region_polygon(path):
+    """
+    Load a region polygon definition from JSON.
+    Expects either a dict with 'vertices_m' (list of [x, y] in meters)
+    or a top-level list of [x, y] pairs.
+    """
+    with open(path, "r") as f:
+        data = json.load(f)
+    if isinstance(data, dict):
+        verts = data.get("vertices_m") or data.get("vertices") or data.get("polygon")
+        if verts is None:
+            raise ValueError(f"Region file '{path}' missing 'vertices_m'/'vertices'/'polygon' key")
+    elif isinstance(data, list):
+        verts = data
+    else:
+        raise ValueError(f"Unsupported region file format: {type(data)}")
+    return [(float(v[0]), float(v[1])) for v in verts]
+
+
+def attach_conflict_positions(events, df):
+    """
+    Attach ego (x_m, y_m) at start_frame to each event as conflict_x_m / conflict_y_m.
+    Mutates and returns the events list.
+    """
+    id_is_numeric = df["carId"].dtype in ("int64", "float64")
+    df_indexed = df.set_index(["carId", "frameNum"])
+    for ev in events:
+        ego_id = ev["ego_id"]
+        if id_is_numeric:
+            try:
+                ego_id_csv = int(ego_id)
+            except (ValueError, TypeError):
+                ego_id_csv = ego_id
+        else:
+            ego_id_csv = ego_id
+        key = (ego_id_csv, ev["start_frame"])
+        try:
+            row = df_indexed.loc[key]
+            if isinstance(row, pd.DataFrame):
+                row = row.iloc[0]
+            ev["conflict_x_m"] = float(row["carCenterXm"])
+            ev["conflict_y_m"] = float(row["carCenterYm"])
+        except KeyError:
+            ev["conflict_x_m"] = None
+            ev["conflict_y_m"] = None
+    return events
+
+
+def filter_events_by_region(events, polygon_vertices):
+    """Keep events whose (conflict_x_m, conflict_y_m) falls inside the polygon."""
+    from matplotlib.path import Path
+    path = Path(polygon_vertices)
+    kept = []
+    for ev in events:
+        x, y = ev.get("conflict_x_m"), ev.get("conflict_y_m")
+        if x is None or y is None:
+            continue
+        if path.contains_point((x, y)):
+            kept.append(ev)
+    return kept
+
+
 def extract_trajectories(csv_path, all_metric_events, period, csv_name):
     """
     For each event from each metric, extract ego and target trajectories within
@@ -152,6 +214,8 @@ def extract_trajectories(csv_path, all_metric_events, period, csv_name):
             segment.insert(0, "event_id", event_id)
             segment["trigger_metric"] = metric_name
             segment[extreme_col] = extreme_value
+            segment["conflict_x_m"] = event.get("conflict_x_m")
+            segment["conflict_y_m"] = event.get("conflict_y_m")
             all_segments.append(segment)
 
     if not all_segments:
@@ -185,6 +249,12 @@ def main():
         help="Number of frames before/after the event to extract (default: 50)."
     )
     parser.add_argument(
+        "--region_polygon", type=str, default=None,
+        help="Optional JSON file with polygon vertices (in meters). "
+             "Events whose conflict location (ego @ start_frame) falls outside "
+             "the polygon will be discarded."
+    )
+    parser.add_argument(
         "--output_path", type=str, default=None,
         help="Output CSV path. Default: {json_name}_events.csv"
     )
@@ -194,15 +264,29 @@ def main():
     csv_name = os.path.splitext(os.path.basename(args.csv_path))[0]
 
     data = load_json(args.json_path)
+    df = pd.read_csv(args.csv_path)
+
+    region_polygon = None
+    if args.region_polygon:
+        region_polygon = load_region_polygon(args.region_polygon)
+        print(f"Region filter active: polygon with {len(region_polygon)} vertices")
 
     all_metric_events = []
     total_events = 0
     for spec in metric_specs:
         events = find_risk_events(data, spec["name"], spec["threshold"], spec["condition"])
+        events = attach_conflict_positions(events, df)
+        n_before = len(events)
+        if region_polygon is not None:
+            events = filter_events_by_region(events, region_polygon)
+            print(f"  {spec['name']} (threshold={spec['threshold']}, "
+                  f"condition={spec['condition']}): "
+                  f"{n_before} -> {len(events)} after region filter")
+        else:
+            print(f"  {spec['name']} (threshold={spec['threshold']}, "
+                  f"condition={spec['condition']}): {len(events)} events")
         all_metric_events.append((spec["name"], spec["condition"], events))
         total_events += len(events)
-        print(f"  {spec['name']} (threshold={spec['threshold']}, "
-              f"condition={spec['condition']}): {len(events)} events")
 
     print(f"Total: {total_events} risk events across {len(metric_specs)} metric(s).")
 

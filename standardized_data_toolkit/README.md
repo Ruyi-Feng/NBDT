@@ -38,18 +38,7 @@ This includes the main SSM calculation flow and related analysis utilities built
 
 ## Shared Utilities
 
-Reusable helper scripts are grouped in:
+Standalone utility scripts that don't fit inside a specific processing module:
 
-- `utils/`: shared utility code for loading data, SSM-related helpers, JSON output, and visualization support
-
-Current utility scripts include:
-
-- `box_distance.py`
-- `data_loader.py`
-- `main.py`
-- `output_json.py`
-- `ssm.py`
-- `visualizer.py`
-
-These utilities support quick experiments and common reusable logic across the toolkit.
-
+- `utils/`: shared utility scripts (e.g., Waymo trajectory visualization)
+- Detailed guide: [`utils/README.md`](./utils/README.md)

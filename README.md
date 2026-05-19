@@ -5,6 +5,24 @@ Intelligent Transportation Systems increasingly depend on heterogeneous data fro
 
 ## Standard Interface
 ### Trajactory Data
+The trajectory data standard definition is available in the [TrajectoryDataFormat Wiki](https://github.com/ZhilingResearch/Ozone/wiki/TrajectoryDataFormat).  
+Use the Standardized Data Toolkit data loader to convert raw datasets into [this format](./standardized_data_toolkit/dataloader/README.md).
+
+Current dataset converters in [`dataloader`](./standardized_data_toolkit/dataloader/README.md#supported-datasets):
+
+| Dataset | Converter Support |
+|:--------|:------------------|
+| [highD](https://levelxdata.com/highd-dataset/) | [Yes](./standardized_data_toolkit/dataloader/README.md#supported-datasets) |
+| [inD](https://levelxdata.com/ind-dataset/) | [Yes](./standardized_data_toolkit/dataloader/README.md#supported-datasets) |
+| [NGSIM](https://data.transportation.gov/stories/s/Next-Generation-Simulation-NGSIM-Open-Data/i5zb-xe34/) | [Yes](./standardized_data_toolkit/dataloader/README.md#supported-datasets) |
+| [CitySim](https://github.com/UCF-SST-Lab/UCF-SST-CitySim1-Dataset) | [Yes](./standardized_data_toolkit/dataloader/README.md#supported-datasets) |
+| [Waymo](https://waymo.com/open/) | [Yes](./standardized_data_toolkit/dataloader/README.md#supported-datasets) |
+
+For dataset-specific [metadata](./standardized_data_toolkit/dataset_metadata.md), field mapping, coordinate notes, and intermediate variables.
+
+Other useful [toolkit](./standardized_data_toolkit/README.md) modules are summarized, including:
+- `ssm_calculator/`: safety surrogate metric (SSM) computation and analysis
+- `utils/`: shared utilities for data loading, JSON export, and visualization support
 
 ### Crash Data
 
