@@ -28,6 +28,7 @@ class BasicTransfer:
         data_list = self.get_all_data()
         for file_path in data_list:
             processed_data = self._process_data(file_path)
+            print("  Processed →", file_path)
             self._save_data(processed_data, file_path)
 
 
