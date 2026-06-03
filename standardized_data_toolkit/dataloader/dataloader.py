@@ -28,6 +28,7 @@ class BasicTransfer:
         data_list = self.get_all_data()
         for file_path in data_list:
             processed_data = self._process_data(file_path)
+            print("  Processed →", file_path)
             self._save_data(processed_data, file_path)
 
 
@@ -230,8 +231,8 @@ class InDTransfer(BasicTransfer):
         bb4Xm = carCenterXm - lc + ws
         bb4Ym = carCenterYm - ls - wc
 
-        # Map vehicle class (NBDT Wiki: 0=car, 3=truck, 5=pedestrian)
-        class_map = {'car': 0, 'truck_bus': 3, 'pedestrian': 5, 'bicycle': -1}
+        # Map vehicle class (NBDT Wiki: 0=car, 2=bus, 3=truck, 4=motorcycle/bicycle, 5=pedestrian)
+        class_map = {'car': 0, 'truck_bus': 3, 'pedestrian': 5, 'bicycle': 4}
         objClass = tracks['class'].map(class_map).fillna(-1).astype(int)
 
         # Convert meter coordinates to pixel coordinates on background image
@@ -1363,6 +1364,19 @@ class WaymoTransfer(BasicTransfer):
     obtained by centerline matching: for each (vehicle, frame) the centre point
     is projected onto every ``LaneCenter.polyline`` segment, and the nearest
     lane within a 2 m distance threshold is taken as ``laneId``.
+
+    objClass mapping (Waymo obj_type → NBDT standard):
+        0 = car / generic vehicle  (obj_type=1 VEHICLE)
+        4 = cyclist                (obj_type=3 CYCLIST)
+        5 = pedestrian             (obj_type=2 PEDESTRIAN)
+       -1 = unknown / other        (obj_type=0 UNSET or 4 OTHER)
+    Note: Waymo does not distinguish car / taxi / truck / bus within VEHICLE,
+    so all VEHICLE agents are mapped to objClass=0.
+
+    vehicleRole (unified AV/HDV indicator, shared with LyftTransfer):
+        0 = surrounding non-vehicle agent (pedestrian / cyclist)
+        1 = HDV (human-driven vehicle)
+        2 = AV / ego data collector
     """
 
     # Vehicles are matched to a lane only when the perpendicular distance from
@@ -1372,6 +1386,8 @@ class WaymoTransfer(BasicTransfer):
     MIN_SEG_LEN2 = 0.1
     # File prefix used by the public Waymo Motion v1.3.0 release.
     TFRECORD_PREFIX = "training_20s.tfrecord-"
+    # Waymo obj_type (0=UNSET,1=VEHICLE,2=PEDESTRIAN,3=CYCLIST,4=OTHER) → NBDT objClass
+    WAYMO_TYPE_TO_OBJCLASS: dict = {0: -1, 1: 0, 2: 5, 3: 4, 4: -1}
 
     def __init__(self, args):
         super().__init__(args)
@@ -1470,10 +1486,11 @@ class WaymoTransfer(BasicTransfer):
         for track in scenario.tracks:
             obj_id = track.id
             obj_type = track.object_type  # 1=VEHICLE, 2=PED, 3=CYCLIST, 4=OTHER
-            # vtype: 1=HDV, 2=AV (ego), 3=others (non-vehicles)
-            vtype = 3
+            # vehicleRole (unified): 0=non-vehicle agent, 1=HDV, 2=AV/ego
             if obj_type == 1:
-                vtype = 2 if obj_id == egoid else 1
+                vehicle_role = 2 if obj_id == egoid else 1
+            else:
+                vehicle_role = 0
 
             for j, state in enumerate(track.states):
                 if not state.valid:
@@ -1538,11 +1555,11 @@ class WaymoTransfer(BasicTransfer):
                     "boundingBox3Y": -1,
                     "boundingBox4X": -1,
                     "boundingBox4Y": -1,
-                    "objClass": -1,
+                    "objClass": WaymoTransfer.WAYMO_TYPE_TO_OBJCLASS.get(obj_type, -1),
                     # 0=UNSET, 1=VEHICLE, 2=PEDESTRIAN, 3=CYCLIST, 4=OTHER
                     "obj_type": obj_type,
-                    # 1=HDV, 2=AV (ego data collector), 3=others
-                    "vtype": vtype,
+                    # unified AV/HDV indicator: 0=non-vehicle agent, 1=HDV, 2=AV/ego
+                    "vehicleRole": vehicle_role,
                     "carCenterLon": -1,
                     "carCenterLat": -1,
                 })
@@ -1566,4 +1583,284 @@ class WaymoTransfer(BasicTransfer):
                 all_records.extend(recs)
 
         print(f"  Waymo: {tf_file} -> {len(all_records)} records")
+        return pd.DataFrame(all_records)
+
+
+class LyftTransfer(BasicTransfer):
+    """Convert Lyft Level-5 Prediction Dataset zarr archives into NBDT standard format.
+
+    Requires l5kit (pip install l5kit). The Lyft Level-5 dataset is no longer
+    publicly available for download; raw zarr archives must be obtained from
+    parties who already hold them.
+
+    Expected directory layout under args.data_folder (used as L5KIT_DATA_FOLDER):
+        <data_folder>/
+            <name>.zarr/          ← one or more zarr scene archives
+            semantic_map/
+                semantic_map.pb
+                meta.json
+
+    Optional args attributes:
+        cfg_path   (str)  path to map config yaml; default: <data_folder>/lyft_map_config.yaml
+        num_scenes (int)  number of scenes to process; default: all scenes in the zarr
+
+    objClass mapping (NBDT wiki standard):
+        0 = car / van   (PERCEPTION_LABEL_CAR, PERCEPTION_LABEL_VAN)
+        2 = bus         (PERCEPTION_LABEL_BUS)
+        3 = truck       (PERCEPTION_LABEL_TRUCK)
+        4 = motorcycle / cyclist / bicycle
+        5 = pedestrian  (PERCEPTION_LABEL_PEDESTRIAN)
+       -1 = unknown / other
+    Note: taxi (objClass=1) is not labelled separately in Lyft; CAR covers it.
+
+    vehicleRole (unified AV/HDV indicator, shared with WaymoTransfer):
+        0 = surrounding agent (role unconfirmed, typically HDV)
+        2 = AV / ego vehicle
+    Note: Lyft does not label surrounding agents as HDV/AV individually,
+    so they all receive vehicleRole=0. vehicleRole=1 (confirmed HDV) is
+    not used by this dataset.
+    """
+
+    EGO_LENGTH = 4.87
+    EGO_WIDTH  = 1.85
+
+    PERCEPTION_LABELS = [
+        "PERCEPTION_LABEL_NOT_SET",
+        "PERCEPTION_LABEL_UNKNOWN",
+        "PERCEPTION_LABEL_DONTCARE",
+        "PERCEPTION_LABEL_CAR",
+        "PERCEPTION_LABEL_VAN",
+        "PERCEPTION_LABEL_TRAM",
+        "PERCEPTION_LABEL_BUS",
+        "PERCEPTION_LABEL_TRUCK",
+        "PERCEPTION_LABEL_EMERGENCY_VEHICLE",
+        "PERCEPTION_LABEL_OTHER_VEHICLE",
+        "PERCEPTION_LABEL_BICYCLE",
+        "PERCEPTION_LABEL_MOTORCYCLE",
+        "PERCEPTION_LABEL_CYCLIST",
+        "PERCEPTION_LABEL_MOTORCYCLIST",
+        "PERCEPTION_LABEL_PEDESTRIAN",
+        "PERCEPTION_LABEL_ANIMAL",
+        "AVRESEARCH_LABEL_DONTCARE",
+    ]
+
+    LABEL_TO_OBJCLASS = {
+        "PERCEPTION_LABEL_CAR":          0,
+        "PERCEPTION_LABEL_VAN":          0,
+        "PERCEPTION_LABEL_BUS":          2,
+        "PERCEPTION_LABEL_TRUCK":        3,
+        "PERCEPTION_LABEL_BICYCLE":      4,
+        "PERCEPTION_LABEL_MOTORCYCLE":   4,
+        "PERCEPTION_LABEL_CYCLIST":      4,
+        "PERCEPTION_LABEL_MOTORCYCLIST": 4,
+        "PERCEPTION_LABEL_PEDESTRIAN":   5,
+    }
+
+    def __init__(self, args):
+        super().__init__(args)
+
+    def get_all_data(self) -> list:
+        """Return all .zarr paths (directories or files) under data_folder."""
+        result = []
+        for name in sorted(os.listdir(self.args.data_folder)):
+            full = os.path.join(self.args.data_folder, name)
+            if name.endswith('.zarr') and (os.path.isdir(full) or os.path.isfile(full)):
+                result.append(full)
+        return result
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _get_obj_class(self, label_probabilities) -> int:
+        label_idx = int(np.argmax(label_probabilities))
+        label_name = self.PERCEPTION_LABELS[label_idx]
+        return self.LABEL_TO_OBJCLASS.get(label_name, -1)
+
+    @staticmethod
+    def _decode_id(raw_id) -> str:
+        if isinstance(raw_id, (bytes, np.bytes_)):
+            return raw_id.decode("utf-8").rstrip("\x00")
+        return str(raw_id).rstrip("\x00")
+
+    @staticmethod
+    def _compute_bbox_corners(cx: float, cy: float, yaw: float,
+                               length: float, width: float) -> np.ndarray:
+        dx, dy = length / 2.0, width / 2.0
+        local_corners = np.array([
+            [ dx,  dy],
+            [ dx, -dy],
+            [-dx, -dy],
+            [-dx,  dy],
+        ])
+        c, s = math.cos(yaw), math.sin(yaw)
+        corners = local_corners @ np.array([[c, -s], [s, c]]).T
+        corners[:, 0] += cx
+        corners[:, 1] += cy
+        return corners
+
+    @staticmethod
+    def _build_lane_cache(map_api) -> list:
+        from matplotlib.path import Path as MplPath
+        lane_cache = []
+        for i, raw_id in enumerate(map_api.bounds_info["lanes"]["ids"]):
+            lane_map_id = LyftTransfer._decode_id(raw_id)
+            try:
+                lane = map_api.get_lane_coords(lane_map_id)
+                left  = np.asarray(lane["xyz_left"])[:, :2]
+                right = np.asarray(lane["xyz_right"])[:, :2]
+                if len(left) < 2 or len(right) < 2:
+                    continue
+                polygon = np.vstack([left, right[::-1]])
+                if polygon.shape[0] < 3:
+                    continue
+                lane_cache.append({
+                    "lane_id": i,
+                    "path":    MplPath(polygon),
+                    "min_x":   float(polygon[:, 0].min()),
+                    "max_x":   float(polygon[:, 0].max()),
+                    "min_y":   float(polygon[:, 1].min()),
+                    "max_y":   float(polygon[:, 1].max()),
+                })
+            except Exception:
+                pass
+        return lane_cache
+
+    @staticmethod
+    def _find_lane_id(x: float, y: float, lane_cache: list, margin: float = 1.0) -> int:
+        for lane in lane_cache:
+            if x < lane["min_x"] - margin or x > lane["max_x"] + margin:
+                continue
+            if y < lane["min_y"] - margin or y > lane["max_y"] + margin:
+                continue
+            if lane["path"].contains_point((x, y), radius=margin):
+                return lane["lane_id"]
+        return -1
+
+    def _make_record(self, scene_idx: int, scene_frame: int, track_id,
+                     cx: float, cy: float, yaw: float, speed: float,
+                     length: float, width: float,
+                     obj_class: int, lane_id: int, vehicle_role: int) -> dict:
+        heading = math.degrees(yaw) % 360.0
+        course  = (90.0 - heading) % 360.0
+        corners = self._compute_bbox_corners(cx, cy, yaw, length, width)
+        return {
+            "frameNum":       int(scene_frame),
+            "carId":          f"{scene_idx}_{track_id}",
+            "laneId":         int(lane_id),
+            "vehicleRole":    int(vehicle_role),
+            "carCenterX":     -1,
+            "carCenterY":     -1,
+            "boundingBox1X":  -1, "boundingBox1Y":  -1,
+            "boundingBox2X":  -1, "boundingBox2Y":  -1,
+            "boundingBox3X":  -1, "boundingBox3Y":  -1,
+            "boundingBox4X":  -1, "boundingBox4Y":  -1,
+            "carCenterXm":    float(cx),
+            "carCenterYm":    float(cy),
+            "boundingBox1Xm": float(corners[0, 0]), "boundingBox1Ym": float(corners[0, 1]),
+            "boundingBox2Xm": float(corners[1, 0]), "boundingBox2Ym": float(corners[1, 1]),
+            "boundingBox3Xm": float(corners[2, 0]), "boundingBox3Ym": float(corners[2, 1]),
+            "boundingBox4Xm": float(corners[3, 0]), "boundingBox4Ym": float(corners[3, 1]),
+            "heading":        float(heading),
+            "course":         float(course),
+            "speed":          float(speed),
+            "objClass":       int(obj_class),
+            "carCenterLon":   -1,
+            "carCenterLat":   -1,
+        }
+
+    def _extract_scene(self, ds, scene_idx: int, lane_cache: list) -> list:
+        scene = ds.scenes[scene_idx]
+        start_frame, end_frame = scene["frame_index_interval"]
+        records = []
+
+        for frame_idx in range(start_frame, end_frame - 1):
+            frame      = ds.frames[frame_idx]
+            next_frame = ds.frames[frame_idx + 1]
+            scene_frame = frame_idx - start_frame
+
+            dt = (int(next_frame["timestamp"]) - int(frame["timestamp"])) * 1e-9
+            if dt <= 0:
+                continue
+
+            # Ego AV
+            ego_xyz      = frame["ego_translation"]
+            next_ego_xyz = next_frame["ego_translation"]
+            ego_x, ego_y = float(ego_xyz[0]), float(ego_xyz[1])
+            ego_speed    = math.sqrt(
+                (float(next_ego_xyz[0]) - ego_x) ** 2 +
+                (float(next_ego_xyz[1]) - ego_y) ** 2
+            ) / dt
+            R       = frame["ego_rotation"]
+            ego_yaw = float(np.arctan2(R[1, 0], R[0, 0]))
+            records.append(self._make_record(
+                scene_idx, scene_frame, -1,
+                ego_x, ego_y, ego_yaw, ego_speed,
+                self.EGO_LENGTH, self.EGO_WIDTH,
+                0, self._find_lane_id(ego_x, ego_y, lane_cache), 2,  # vehicleRole=2: AV/ego
+            ))
+
+            # Surrounding agents
+            agent_start, agent_end = frame["agent_index_interval"]
+            agents = ds.agents[agent_start:agent_end]
+            for k in range(len(agents)):
+                cx  = float(agents["centroid"][k, 0])
+                cy  = float(agents["centroid"][k, 1])
+                vx  = float(agents["velocity"][k, 0])
+                vy  = float(agents["velocity"][k, 1])
+                records.append(self._make_record(
+                    scene_idx, scene_frame, int(agents["track_id"][k]),
+                    cx, cy, float(agents["yaw"][k]),
+                    math.sqrt(vx**2 + vy**2),
+                    float(agents["extent"][k, 0]),
+                    float(agents["extent"][k, 1]),
+                    self._get_obj_class(agents["label_probabilities"][k]),
+                    self._find_lane_id(cx, cy, lane_cache),
+                    0,
+                ))
+
+        return records
+
+    @staticmethod
+    def _ensure_map_config(cfg_path: str) -> None:
+        if os.path.exists(cfg_path):
+            return
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(
+                'raster_params:\n'
+                '  semantic_map_key: "semantic_map/semantic_map.pb"\n'
+                '  dataset_meta_key: "semantic_map/meta.json"\n'
+            )
+        print("Created map config:", cfg_path)
+
+    def _process_data(self, zarr_path: str) -> pd.DataFrame:
+        # Heavy deps imported lazily so non-Lyft users do not need them.
+        from l5kit.data import ChunkedDataset, LocalDataManager
+        from l5kit.configs import load_config_data
+        from l5kit.data import MapAPI
+
+        data_root = self.args.data_folder
+        os.environ["L5KIT_DATA_FOLDER"] = data_root
+
+        cfg_path = getattr(self.args, "cfg_path",
+                           os.path.join(data_root, "lyft_map_config.yaml"))
+        self._ensure_map_config(cfg_path)
+
+        ds = ChunkedDataset(zarr_path)
+        ds.open()
+
+        cfg     = load_config_data(cfg_path)
+        dm      = LocalDataManager(data_root)
+        map_api = MapAPI.from_cfg(dm, cfg)
+
+        lane_cache = self._build_lane_cache(map_api)
+        print(f"  Lyft: {os.path.basename(zarr_path)} "
+              f"→ {ds.scenes.shape[0]} scenes, {len(lane_cache)} lane polygons")
+
+        num_scenes  = getattr(self.args, "num_scenes", ds.scenes.shape[0])
+        all_records = []
+        for scene_idx in range(num_scenes):
+            all_records.extend(self._extract_scene(ds, scene_idx, lane_cache))
+
+        print(f"  Lyft: {os.path.basename(zarr_path)} → {len(all_records)} records")
         return pd.DataFrame(all_records)

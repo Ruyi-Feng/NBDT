@@ -1,0 +1,25 @@
+{
+  "mode": "calibrate",
+  "model": "all",
+  "input_dir": "input",
+  "csv_files": [],
+  "sample": {
+    "frame_step": 6,
+    "max_rows_per_file": 0,
+    "max_cf_samples": 12000,
+    "max_lc_samples": 12000,
+    "sample_seed": 42
+  },
+  "ga": {
+    "population": 24,
+    "generations": 18,
+    "mutation_rate": 0.25,
+    "seed": 42
+  },
+  "grid_search": {
+    "population_candidates": [12, 24],
+    "generation_candidates": [10, 18],
+    "mutation_rate_candidates": [0.15, 0.25, 0.35],
+    "seed_candidates": [42]
+  }
+}
